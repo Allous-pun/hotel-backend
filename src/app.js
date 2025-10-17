@@ -42,7 +42,7 @@ app.use("/api/auth", authRoutes);
 app.use("/api/users", userRoutes);
 app.use("/api/rooms", roomRoutes);
 app.use("/api/bookings", bookingRoutes);
-app.use("/api/food", foodRoutes);
+app.use("/api/foods", foodRoutes);
 app.use("/api/events", eventRoutes);
 app.use("/api/settings", require("./routes/setting.routes"));
 

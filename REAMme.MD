@@ -344,3 +344,180 @@ Returns logged-in user details.
 | `admin` | System admin (full access, manage settings, users) | Full         |
 
 ---
+
+
+# 🏨 **Roomie Explorer Backend Role Capabilities**
+
+## 👑 **ADMIN CAPABILITIES**
+
+Admins have **full system control**, including security, configuration, and user management.
+They manage everything staff can, plus **system-level and sensitive operations**.
+
+### ✅ **Admin Can:**
+
+#### 🔐 Authentication & Users
+
+* View all users → `GET /api/users`
+* Get single user details → `GET /api/users/:id`
+* Manage admin/staff accounts (via special secret keys)
+* Change admin password → `PUT /api/settings/password`
+
+#### 🏠 Rooms
+
+* Create new rooms → `POST /api/rooms`
+* Update room info → `PUT /api/rooms/:roomId`
+* Delete a room → `DELETE /api/rooms/:roomId` 🚫 *(Staff cannot do this)*
+
+#### 🧾 Bookings
+
+* View all bookings → `GET /api/bookings`
+* View a booking by code → `GET /api/bookings/:code`
+* Update booking status → `PUT /api/bookings/:code`
+* Cancel booking → `DELETE /api/bookings/:code`
+
+#### 🍽 Food & Orders
+
+* Create new menu items → `POST /api/foods`
+* Update existing food → `PUT /api/foods/:id`
+* Delete food → `DELETE /api/foods/:id` 🚫 *(Staff cannot do this)*
+* View all orders → `GET /api/foods/orders`
+* Manage order statuses → `PUT /api/foods/orders/code/:orderCode`
+
+#### 🎉 Events
+
+* Create new events → `POST /api/events`
+* Update event → `PUT /api/events/:eventCode`
+* Delete event → `DELETE /api/events/:eventCode` 🚫 *(Staff cannot do this)*
+* View & manage event bookings →
+
+  * `GET /api/events/bookings`
+  * `GET /api/events/bookings/:reservationCode`
+  * `PUT /api/events/bookings/:reservationCode`
+  * `DELETE /api/events/bookings/:reservationCode`
+
+#### ⚙️ System Settings
+
+* Full access to system configuration:
+
+  * `PUT /api/settings`
+  * Update restaurant info → `/api/settings/info`
+  * Update hours → `/api/settings/hours`
+  * Update notifications → `/api/settings/notifications`
+  * Update security policies → `/api/settings/security`
+  * Toggle maintenance mode, registration → `/api/settings/system`
+* Enable/disable **2FA**
+* Configure **password policy**
+* Toggle **booking auto-confirm**, **maintenance mode**, etc.
+
+---
+
+## 🧑‍💼 **STAFF CAPABILITIES**
+
+Staff members handle **operational tasks** — bookings, food orders, events, and room updates.
+They help run daily hotel activities but **don’t control system-wide or security settings**.
+
+### ✅ **Staff Can:**
+
+#### 🏠 Rooms
+
+* View all rooms → `GET /api/rooms`
+* Get room details → `GET /api/rooms/:roomId`
+* Create new rooms → `POST /api/rooms`
+* Update rooms → `PUT /api/rooms/:roomId`
+
+❌ Cannot delete rooms.
+
+---
+
+#### 🧾 Bookings
+
+* View all bookings → `GET /api/bookings`
+* Get booking by code → `GET /api/bookings/:code`
+* Update booking status → `PUT /api/bookings/:code`
+* Cancel booking → `DELETE /api/bookings/:code`
+
+---
+
+#### 🍽 Food & Orders
+
+* View all menu items → `GET /api/foods`
+* Add food items → `POST /api/foods`
+* Update food → `PUT /api/foods/:id`
+* View all orders → `GET /api/foods/orders`
+* Update order status → `PUT /api/foods/orders/code/:orderCode`
+
+❌ Cannot delete food items.
+
+---
+
+#### 🎉 Events
+
+* Create new events → `POST /api/events`
+* Update events → `PUT /api/events/:eventCode`
+* View and manage event bookings → same as admin:
+
+  * `GET /api/events/bookings`
+  * `PUT /api/events/bookings/:reservationCode`
+
+❌ Cannot delete events.
+
+---
+
+#### ⚙️ Settings
+
+* View current system settings → `GET /api/settings`
+
+❌ Cannot modify settings or system configurations.
+
+---
+
+## 🚫 **Staff Cannot:**
+
+| Area     | Restricted Action                               | Admin Only? |
+| -------- | ----------------------------------------------- | ----------- |
+| Rooms    | Delete rooms                                    | ✅           |
+| Food     | Delete food items                               | ✅           |
+| Events   | Delete events                                   | ✅           |
+| Users    | View all users or manage accounts               | ✅           |
+| Settings | Update restaurant info, hours, or notifications | ✅           |
+| Security | Manage password policies or 2FA                 | ✅           |
+| System   | Toggle maintenance mode or self-registration    | ✅           |
+| Password | Change admin password                           | ✅           |
+
+---
+
+## 🤝 **Admin & Staff Shared Permissions**
+
+| Function              | Endpoint                       | Notes                                      |
+| --------------------- | ------------------------------ | ------------------------------------------ |
+| Manage rooms          | `POST/PUT /api/rooms`          | Both can create/update rooms               |
+| Manage bookings       | `GET/PUT/DELETE /api/bookings` | Both can view, confirm, or cancel bookings |
+| Manage food menu      | `POST/PUT /api/foods`          | Both can add/update menu items             |
+| Manage orders         | `GET/PUT /api/foods/orders`    | Both can process food orders               |
+| Manage events         | `POST/PUT /api/events`         | Both can create and edit events            |
+| Manage event bookings | `GET/PUT /api/events/bookings` | Both can confirm or update event bookings  |
+| View settings         | `GET /api/settings`            | Read-only for staff                        |
+
+---
+
+## 🧭 Summary Table
+
+| Feature                | Guest | Staff | Admin |
+| ---------------------- | ----- | ----- | ----- |
+| View rooms             | ✅     | ✅     | ✅     |
+| Manage rooms           | ❌     | ✅     | ✅     |
+| Delete rooms           | ❌     | ❌     | ✅     |
+| Create bookings        | ✅     | ✅     | ✅     |
+| Manage all bookings    | ❌     | ✅     | ✅     |
+| Manage food menu       | ❌     | ✅     | ✅     |
+| Delete food            | ❌     | ❌     | ✅     |
+| Manage food orders     | ❌     | ✅     | ✅     |
+| Manage events          | ❌     | ✅     | ✅     |
+| Delete events          | ❌     | ❌     | ✅     |
+| Manage settings        | ❌     | ❌     | ✅     |
+| Manage users           | ❌     | ❌     | ✅     |
+| Security configuration | ❌     | ❌     | ✅     |
+
+---
+
+
