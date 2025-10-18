@@ -17,10 +17,54 @@ const {
 const authMiddleware = require("../middleware/authMiddleware");
 const roleMiddleware = require("../middleware/roleMiddleware");
 
-// --- 🔹 Public routes ---
-router.get("/", getEvents); // List all events
 
-// 🔹 Check event availability (public)
+// ======================================================
+// 🔹 STAFF / ADMIN: BOOKING MANAGEMENT (place these FIRST)
+// ======================================================
+router.get(
+  "/bookings",
+  authMiddleware,
+  roleMiddleware("staff", "admin"),
+  getAllBookings
+);
+
+router.get(
+  "/bookings/:reservationCode",
+  authMiddleware,
+  roleMiddleware("staff", "admin"),
+  getBookingByCode
+);
+
+router.put(
+  "/bookings/:reservationCode",
+  authMiddleware,
+  roleMiddleware("staff", "admin"),
+  updateBookingStatus
+);
+
+router.delete(
+  "/bookings/:reservationCode",
+  authMiddleware,
+  roleMiddleware("staff", "admin"),
+  cancelBooking
+);
+
+
+// ======================================================
+// 🔹 USER ROUTES (booking and viewing their own)
+// ======================================================
+router.post("/book", authMiddleware, bookEvent); // Book an event
+router.get("/my", authMiddleware, getMyEventBookings); // User's event bookings
+
+
+// ======================================================
+// 🔹 PUBLIC ROUTES
+// ======================================================
+
+// Get all events
+router.get("/", getEvents);
+
+// Check event availability
 router.get("/:eventId/availability", async (req, res) => {
   const Event = require("../models/Event");
   const EventBooking = require("../models/EventBooking");
@@ -55,43 +99,13 @@ router.get("/:eventId/availability", async (req, res) => {
   }
 });
 
-// Get single event by eventCode
+// Get single event by code
 router.get("/:eventCode", getEventByCode);
 
-// --- 🔹 User routes ---
-router.post("/book", authMiddleware, bookEvent); // Book an event
-router.get("/my", authMiddleware, getMyEventBookings); // Get logged-in user's event bookings
 
-// --- 🔹 Staff/Admin booking management ---
-router.get(
-  "/bookings",
-  authMiddleware,
-  roleMiddleware("staff", "admin"),
-  getAllBookings
-);
-
-router.get(
-  "/bookings/:reservationCode",
-  authMiddleware,
-  roleMiddleware("staff", "admin"),
-  getBookingByCode
-);
-
-router.put(
-  "/bookings/:reservationCode",
-  authMiddleware,
-  roleMiddleware("staff", "admin"),
-  updateBookingStatus
-);
-
-router.delete(
-  "/bookings/:reservationCode",
-  authMiddleware,
-  roleMiddleware("staff", "admin"),
-  cancelBooking
-);
-
-// --- 🔹 Admin/Staff event management ---
+// ======================================================
+// 🔹 ADMIN / STAFF: EVENT MANAGEMENT
+// ======================================================
 router.post("/", authMiddleware, roleMiddleware("admin", "staff"), createEvent);
 router.put(
   "/:eventCode",
@@ -105,5 +119,6 @@ router.delete(
   roleMiddleware("admin"),
   deleteEvent
 );
+
 
 module.exports = router;
