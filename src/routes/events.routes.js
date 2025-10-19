@@ -12,6 +12,10 @@ const {
   getBookingByCode,
   updateBookingStatus,
   cancelBooking,
+  requestQuote,
+  submitEnquiry,
+  getQuotations,
+  getEnquiries,
 } = require("../controllers/event.controller");
 
 const authMiddleware = require("../middleware/authMiddleware");
@@ -58,7 +62,34 @@ router.get("/my", authMiddleware, getMyEventBookings); // User's event bookings
 
 
 // ======================================================
-// 🔹 PUBLIC ROUTES
+// 🔹 PUBLIC ROUTES: Quotations & Enquiries
+// ======================================================
+
+// Request a quotation for a specific event
+router.post("/:eventCode/quote", requestQuote);
+
+// Submit a general event enquiry
+router.post("/enquiry", submitEnquiry);
+
+// Admin/Staff: view all quotations
+router.get(
+  "/quotations",
+  authMiddleware,
+  roleMiddleware("admin", "staff"),
+  getQuotations
+);
+
+// Admin/Staff: view all enquiries
+router.get(
+  "/enquiries",
+  authMiddleware,
+  roleMiddleware("admin", "staff"),
+  getEnquiries
+);
+
+
+// ======================================================
+// 🔹 PUBLIC EVENT ROUTES
 // ======================================================
 
 // Get all events
@@ -99,7 +130,7 @@ router.get("/:eventId/availability", async (req, res) => {
   }
 });
 
-// Get single event by code
+// ⚠️ KEEP THIS LAST — prevents route conflicts
 router.get("/:eventCode", getEventByCode);
 
 
@@ -107,18 +138,19 @@ router.get("/:eventCode", getEventByCode);
 // 🔹 ADMIN / STAFF: EVENT MANAGEMENT
 // ======================================================
 router.post("/", authMiddleware, roleMiddleware("admin", "staff"), createEvent);
+
 router.put(
   "/:eventCode",
   authMiddleware,
   roleMiddleware("admin", "staff"),
   updateEvent
 );
+
 router.delete(
   "/:eventCode",
   authMiddleware,
   roleMiddleware("admin"),
   deleteEvent
 );
-
 
 module.exports = router;
