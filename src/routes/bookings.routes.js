@@ -10,24 +10,24 @@ const {
 } = require("../controllers/booking.controller");
 
 const authMiddleware = require("../middleware/authMiddleware");
-const roleMiddleware = require("../middleware/roleMiddleware");
+const { staffOrAdmin, waiterOrAbove } = require("../middleware/roleMiddleware");
 
-// User: create new booking
+// User: create new booking (all authenticated users except waiters)
 router.post("/", authMiddleware, createBooking);
 
-// User: get their bookings
+// User: get their bookings (all authenticated users)
 router.get("/my", authMiddleware, getMyBookings);
 
-// Staff/Admin: get all bookings
-router.get("/", authMiddleware, roleMiddleware("staff", "admin"), getAllBookings);
+// Waiter/Staff/Admin: get all bookings (waiter is read-only)
+router.get("/", authMiddleware, waiterOrAbove, getAllBookings);
 
-// Staff/Admin: get booking by bookingCode
-router.get("/:code", authMiddleware, roleMiddleware("staff", "admin"), getBookingByCode);
+// Waiter/Staff/Admin: get booking by bookingCode (waiter is read-only)
+router.get("/:code", authMiddleware, waiterOrAbove, getBookingByCode);
 
-// Staff/Admin: update booking status
-router.put("/:code", authMiddleware, roleMiddleware("staff", "admin"), updateBookingStatus);
+// Staff/Admin: update booking status (waiter CANNOT update)
+router.put("/:code", authMiddleware, staffOrAdmin, updateBookingStatus);
 
-// Staff/Admin: cancel booking
-router.delete("/:code", authMiddleware, roleMiddleware("staff", "admin"), cancelBooking);
+// Staff/Admin: cancel booking (waiter CANNOT cancel)
+router.delete("/:code", authMiddleware, staffOrAdmin, cancelBooking);
 
 module.exports = router;

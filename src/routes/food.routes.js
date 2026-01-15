@@ -8,37 +8,66 @@ const {
   updateFood,
   deleteFood,
   getAllOrders,
-  updateOrderStatusByCode, // 🔹 renamed
-  getOrderByCode          // 🔹 added
+  updateOrderStatusByCode,
+  getOrderByCode,
+  getOrdersByTable,
+  assignOrderToSelf,
+  getMyAssignedOrders,
+  getAvailableOrders,
+  // 🔹 NEW: Table management functions
+  getTableStatus,
+  checkTableClearance,
+  clearTable,
+  occupyTable
 } = require("../controllers/food.controller");
 const authMiddleware = require("../middleware/authMiddleware");
-const roleMiddleware = require("../middleware/roleMiddleware");
+const { adminOnly, staffOrAdmin, waiterOrAbove } = require("../middleware/roleMiddleware");
 
 // Public: get all food items
 router.get("/", getFoods);
 
 // Admin/Staff: add food item
-router.post("/", authMiddleware, roleMiddleware("admin", "staff"), createFood);
+router.post("/", authMiddleware, staffOrAdmin, createFood);
 
 // Admin/Staff: update food item
-router.put("/:id", authMiddleware, roleMiddleware("admin", "staff"), updateFood);
+router.put("/:id", authMiddleware, staffOrAdmin, updateFood);
 
 // Admin: delete food item
-router.delete("/:id", authMiddleware, roleMiddleware("admin"), deleteFood);
+router.delete("/:id", authMiddleware, adminOnly, deleteFood);
 
-// User: place food order
+// User: place food order (with table info)
 router.post("/order", authMiddleware, createFoodOrder);
 
 // User: get their orders
 router.get("/orders/my", authMiddleware, getMyOrders);
 
-// Staff/Admin: get all orders
-router.get("/orders", authMiddleware, roleMiddleware("staff", "admin"), getAllOrders);
+// Waiter: get my assigned orders
+router.get("/orders/my-assigned", authMiddleware, waiterOrAbove, getMyAssignedOrders);
 
-// Staff/Admin: update order status by orderCode
-router.put("/orders/code/:orderCode", authMiddleware, roleMiddleware("staff", "admin"), updateOrderStatusByCode);
+// Waiter: get available (unassigned) orders
+router.get("/orders/available", authMiddleware, waiterOrAbove, getAvailableOrders);
 
-// Staff/Admin: get single order by orderCode
-router.get("/orders/code/:orderCode", authMiddleware, roleMiddleware("staff", "admin"), getOrderByCode);
+// Waiter: assign order to self
+router.post("/orders/:orderCode/assign-self", authMiddleware, waiterOrAbove, assignOrderToSelf);
+
+// Waiter/Staff/Admin: get all orders
+router.get("/orders", authMiddleware, waiterOrAbove, getAllOrders);
+
+// Waiter/Staff/Admin: get orders grouped by table
+router.get("/orders/by-table", authMiddleware, waiterOrAbove, getOrdersByTable);
+
+// Waiter/Staff/Admin: update order status by orderCode
+router.put("/orders/code/:orderCode", authMiddleware, waiterOrAbove, updateOrderStatusByCode);
+
+// Waiter/Staff/Admin: get single order by orderCode
+router.get("/orders/code/:orderCode", authMiddleware, waiterOrAbove, getOrderByCode);
+
+// 🔹 Table management routes
+router.get("/tables/status", authMiddleware, waiterOrAbove, getTableStatus);
+router.get("/tables/:tableNumber/check-clear", authMiddleware, waiterOrAbove, checkTableClearance);
+router.get("/tables/:tableNumber/:tableSection/check-clear", authMiddleware, waiterOrAbove, checkTableClearance);
+router.post("/tables/:tableNumber/clear", authMiddleware, waiterOrAbove, clearTable);
+router.post("/tables/:tableNumber/:tableSection/clear", authMiddleware, waiterOrAbove, clearTable);
+router.post("/tables/occupy", authMiddleware, waiterOrAbove, occupyTable);
 
 module.exports = router;

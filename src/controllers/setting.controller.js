@@ -6,6 +6,14 @@ const mongoose = require("mongoose");
 // 🟩 Get all settings
 exports.getSettings = async (req, res) => {
   try {
+    // Check if waiter is trying to access (should be blocked by middleware)
+    if (req.user.role === "waiter") {
+      return res.status(403).json({ 
+        message: "Waiters cannot access settings",
+        details: "Settings access is restricted to staff and admin only"
+      });
+    }
+    
     const settings = await Setting.findOne();
     if (!settings) return res.status(404).json({ message: "Settings not found" });
 
@@ -19,6 +27,14 @@ exports.getSettings = async (req, res) => {
 // 🟩 Create or update all settings (Admin)
 exports.updateSettings = async (req, res) => {
   try {
+    // Check if staff is trying to update (should be blocked by middleware)
+    if (req.user.role === "staff") {
+      return res.status(403).json({ 
+        message: "Staff cannot update settings",
+        details: "Settings can only be updated by admin"
+      });
+    }
+    
     let settings = await Setting.findOne();
     const updatedData = { ...req.body, lastUpdatedBy: req.user?._id };
 
@@ -42,6 +58,14 @@ exports.updateSettings = async (req, res) => {
 // 🟦 Update Restaurant Info
 exports.updateRestaurantInfo = async (req, res) => {
   try {
+    // Check if staff is trying to update
+    if (req.user.role === "staff") {
+      return res.status(403).json({ 
+        message: "Staff cannot update restaurant information",
+        details: "Restaurant information can only be updated by admin"
+      });
+    }
+    
     const settings = await Setting.findOne();
     if (!settings) return res.status(404).json({ message: "Settings not found" });
 
@@ -62,6 +86,14 @@ exports.updateRestaurantInfo = async (req, res) => {
 // 🟧 Update Operating Hours - FIXED VERSION
 exports.updateOperatingHours = async (req, res) => {
   try {
+    // Check if staff is trying to update
+    if (req.user.role === "staff") {
+      return res.status(403).json({ 
+        message: "Staff cannot update operating hours",
+        details: "Operating hours can only be updated by admin"
+      });
+    }
+    
     const settings = await Setting.findOne();
     if (!settings) return res.status(404).json({ message: "Settings not found" });
 
@@ -110,6 +142,14 @@ exports.updateOperatingHours = async (req, res) => {
 // 🟨 Update Notification Preferences
 exports.updateNotifications = async (req, res) => {
   try {
+    // Check if staff is trying to update
+    if (req.user.role === "staff") {
+      return res.status(403).json({ 
+        message: "Staff cannot update notification settings",
+        details: "Notification settings can only be updated by admin"
+      });
+    }
+    
     const settings = await Setting.findOne();
     if (!settings) return res.status(404).json({ message: "Settings not found" });
 
@@ -144,6 +184,14 @@ exports.updateNotifications = async (req, res) => {
 // 🟥 Update Security Settings (2FA or password policy)
 exports.updateSecurity = async (req, res) => {
   try {
+    // Check if staff is trying to update
+    if (req.user.role === "staff") {
+      return res.status(403).json({ 
+        message: "Staff cannot update security settings",
+        details: "Security settings can only be updated by admin"
+      });
+    }
+    
     const settings = await Setting.findOne();
     if (!settings) return res.status(404).json({ message: "Settings not found" });
 
@@ -174,6 +222,14 @@ exports.updateSecurity = async (req, res) => {
 // 🟪 Update System Preferences (maintenance mode, etc.)
 exports.updateSystemPreferences = async (req, res) => {
   try {
+    // Check if staff is trying to update
+    if (req.user.role === "staff") {
+      return res.status(403).json({ 
+        message: "Staff cannot update system preferences",
+        details: "System preferences can only be updated by admin"
+      });
+    }
+    
     const settings = await Setting.findOne();
     if (!settings) return res.status(404).json({ message: "Settings not found" });
 
@@ -194,6 +250,14 @@ exports.updateSystemPreferences = async (req, res) => {
 // 🔐 Change Admin Password (with validation)
 exports.updatePassword = async (req, res) => {
   try {
+    // Check if staff is trying to update
+    if (req.user.role === "staff") {
+      return res.status(403).json({ 
+        message: "Staff cannot change admin password",
+        details: "Admin password can only be changed by admin"
+      });
+    }
+    
     const { currentPassword, newPassword } = req.body;
     const user = await User.findById(req.user._id);
     if (!user) return res.status(404).json({ message: "User not found" });
@@ -260,6 +324,14 @@ exports.getAboutUs = async (req, res) => {
 // Update About Us (Admin)
 exports.updateAboutUs = async (req, res) => {
   try {
+    // Check if staff is trying to update
+    if (req.user.role === "staff") {
+      return res.status(403).json({ 
+        message: "Staff cannot update about us",
+        details: "About us content can only be updated by admin"
+      });
+    }
+    
     const settings = await Setting.findOne();
     if (!settings) return res.status(404).json({ message: "Settings not found" });
 
@@ -299,6 +371,14 @@ exports.getContactInfo = async (req, res) => {
 // Update Contact settings (Admin) - FIXED
 exports.updateContactInfo = async (req, res) => {
   try {
+    // Check if staff is trying to update
+    if (req.user.role === "staff") {
+      return res.status(403).json({ 
+        message: "Staff cannot update contact information",
+        details: "Contact information can only be updated by admin"
+      });
+    }
+    
     const settings = await Setting.findOne();
     if (!settings) return res.status(404).json({ message: "Settings not found" });
 
@@ -500,6 +580,7 @@ exports.updateContactSubmission = async (req, res) => {
     res.status(500).json({ message: "Server error" });
   }
 };
+
 // Add response to contact submission (Admin/Staff)
 exports.addResponseToSubmission = async (req, res) => {
   try {

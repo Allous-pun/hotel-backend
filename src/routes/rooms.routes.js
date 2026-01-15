@@ -8,7 +8,7 @@ const {
   deleteRoom,
 } = require("../controllers/room.controller");
 const authMiddleware = require("../middleware/authMiddleware");
-const roleMiddleware = require("../middleware/roleMiddleware");
+const { adminOnly, staffOrAdmin } = require("../middleware/roleMiddleware"); // CHANGE THIS
 const Booking = require("../models/Booking");
 
 // Public: get all rooms
@@ -45,12 +45,12 @@ router.get("/:roomId/availability", async (req, res) => {
 });
 
 // Admin/Staff: create room
-router.post("/", authMiddleware, roleMiddleware("admin", "staff"), createRoom);
+router.post("/", authMiddleware, staffOrAdmin, createRoom); // CHANGED
 
 // Admin/Staff: update room
-router.put("/:roomId", authMiddleware, roleMiddleware("admin", "staff"), updateRoom);
+router.put("/:roomId", authMiddleware, staffOrAdmin, updateRoom); // CHANGED
 
 // Admin: delete room
-router.delete("/:roomId", authMiddleware, roleMiddleware("admin"), deleteRoom);
+router.delete("/:roomId", authMiddleware, adminOnly, deleteRoom); // CHANGED
 
 module.exports = router;

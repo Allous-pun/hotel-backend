@@ -1,4 +1,6 @@
-// middleware/roleMiddleware.js - USE THIS FIXED VERSION
+// src/middleware/roleMiddleware.js
+
+// Original middleware - keeps the same logic
 function roleMiddleware(allowedRoles) {
   return (req, res, next) => {
     if (!req.user) {
@@ -19,4 +21,24 @@ function roleMiddleware(allowedRoles) {
   };
 }
 
-module.exports = roleMiddleware;
+// Conceptual helpers using the original roleMiddleware function:
+
+// adminOnly - Strict admin access
+const adminOnly = roleMiddleware("admin");
+
+// staffOrAdmin - For management tasks
+const staffOrAdmin = roleMiddleware(["staff", "admin"]);
+
+// waiterOrAbove - Waiter, staff, or admin
+const waiterOrAbove = roleMiddleware(["waiter", "staff", "admin"]);
+
+// notGuest - Any authenticated user except guest
+const notGuest = roleMiddleware(["waiter", "staff", "admin"]);
+
+module.exports = {
+  roleMiddleware,  // Original flexible middleware
+  adminOnly,       // Strict admin access
+  staffOrAdmin,    // Staff or admin  
+  waiterOrAbove,   // Waiter, staff, or admin
+  notGuest         // Any authenticated non-guest (same as waiterOrAbove)
+};

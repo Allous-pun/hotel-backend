@@ -4,6 +4,14 @@ const Room = require("../models/Room");
 // Create booking (user)
 exports.createBooking = async (req, res) => {
   try {
+    // 🔹 Check role - waiters cannot create bookings
+    if (req.user.role === "waiter") {
+      return res.status(403).json({ 
+        message: "Waiters cannot create room bookings",
+        details: "Please use a guest, staff, or admin account to create bookings"
+      });
+    }
+    
     const { room: roomId, checkIn, checkOut } = req.body;
     if (!roomId || !checkIn || !checkOut)
       return res.status(400).json({ message: "room, checkIn and checkOut are required" });
@@ -60,7 +68,7 @@ exports.getMyBookings = async (req, res) => {
   }
 };
 
-// Staff/Admin: get all bookings
+// Staff/Admin: get all bookings (now includes waiters as read-only)
 exports.getAllBookings = async (req, res) => {
   try {
     const bookings = await Booking.find()
@@ -73,7 +81,7 @@ exports.getAllBookings = async (req, res) => {
   }
 };
 
-// Get booking by bookingCode (user/staff)
+// Get booking by bookingCode (user/staff/waiter)
 exports.getBookingByCode = async (req, res) => {
   try {
     const { code } = req.params;
@@ -88,11 +96,19 @@ exports.getBookingByCode = async (req, res) => {
   }
 };
 
-// Staff/Admin: update booking status or paymentStatus
+// Staff/Admin: update booking status or paymentStatus (waiter CANNOT update)
 exports.updateBookingStatus = async (req, res) => {
   try {
     const { code } = req.params;
     const { status, paymentStatus } = req.body;
+
+    // 🔹 Additional check to ensure waiter cannot update
+    if (req.user.role === "waiter") {
+      return res.status(403).json({ 
+        message: "Waiters cannot update booking status",
+        details: "Only staff or admin can update bookings"
+      });
+    }
 
     const booking = await Booking.findOne({ bookingCode: code }).populate("room");
     if (!booking) return res.status(404).json({ message: "Booking not found" });
@@ -120,10 +136,19 @@ exports.updateBookingStatus = async (req, res) => {
   }
 };
 
-// Staff/Admin: cancel booking
+// Staff/Admin: cancel booking (waiter CANNOT cancel)
 exports.cancelBooking = async (req, res) => {
   try {
     const { code } = req.params;
+    
+    // 🔹 Additional check to ensure waiter cannot cancel
+    if (req.user.role === "waiter") {
+      return res.status(403).json({ 
+        message: "Waiters cannot cancel bookings",
+        details: "Only staff or admin can cancel bookings"
+      });
+    }
+
     const booking = await Booking.findOneAndUpdate(
       { bookingCode: code },
       { status: "cancelled" },

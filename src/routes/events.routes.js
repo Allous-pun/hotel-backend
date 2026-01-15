@@ -19,7 +19,7 @@ const {
 } = require("../controllers/event.controller");
 
 const authMiddleware = require("../middleware/authMiddleware");
-const roleMiddleware = require("../middleware/roleMiddleware");
+const { adminOnly, staffOrAdmin, notGuest } = require("../middleware/roleMiddleware"); // CHANGE THIS
 
 
 // ======================================================
@@ -28,28 +28,28 @@ const roleMiddleware = require("../middleware/roleMiddleware");
 router.get(
   "/bookings",
   authMiddleware,
-  roleMiddleware("staff", "admin"),
+  staffOrAdmin, // CHANGED
   getAllBookings
 );
 
 router.get(
   "/bookings/:reservationCode",
   authMiddleware,
-  roleMiddleware("staff", "admin"),
+  staffOrAdmin, // CHANGED
   getBookingByCode
 );
 
 router.put(
   "/bookings/:reservationCode",
   authMiddleware,
-  roleMiddleware("staff", "admin"),
+  staffOrAdmin, // CHANGED
   updateBookingStatus
 );
 
 router.delete(
   "/bookings/:reservationCode",
   authMiddleware,
-  roleMiddleware("staff", "admin"),
+  staffOrAdmin, // CHANGED
   cancelBooking
 );
 
@@ -57,8 +57,8 @@ router.delete(
 // ======================================================
 // 🔹 USER ROUTES (booking and viewing their own)
 // ======================================================
-router.post("/book", authMiddleware, bookEvent); // Book an event
-router.get("/my", authMiddleware, getMyEventBookings); // User's event bookings
+router.post("/book", authMiddleware, notGuest, bookEvent); // CHANGED - added notGuest
+router.get("/my", authMiddleware, notGuest, getMyEventBookings); // CHANGED - added notGuest
 
 
 // ======================================================
@@ -75,7 +75,7 @@ router.post("/enquiry", submitEnquiry);
 router.get(
   "/quotations",
   authMiddleware,
-  roleMiddleware("admin", "staff"),
+  staffOrAdmin, // CHANGED
   getQuotations
 );
 
@@ -83,7 +83,7 @@ router.get(
 router.get(
   "/enquiries",
   authMiddleware,
-  roleMiddleware("admin", "staff"),
+  staffOrAdmin, // CHANGED
   getEnquiries
 );
 
@@ -137,19 +137,19 @@ router.get("/:eventCode", getEventByCode);
 // ======================================================
 // 🔹 ADMIN / STAFF: EVENT MANAGEMENT
 // ======================================================
-router.post("/", authMiddleware, roleMiddleware("admin", "staff"), createEvent);
+router.post("/", authMiddleware, staffOrAdmin, createEvent); // CHANGED
 
 router.put(
   "/:eventCode",
   authMiddleware,
-  roleMiddleware("admin", "staff"),
+  staffOrAdmin, // CHANGED
   updateEvent
 );
 
 router.delete(
   "/:eventCode",
   authMiddleware,
-  roleMiddleware("admin"),
+  adminOnly, // CHANGED
   deleteEvent
 );
 

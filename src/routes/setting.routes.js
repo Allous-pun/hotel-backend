@@ -22,11 +22,11 @@ const {
   addResponseToSubmission,
   addInternalNote,
   deleteContactSubmission,
-  getRestaurantBasicInfo, // Add this new function
+  getRestaurantBasicInfo,
 } = require("../controllers/setting.controller");
 
 const authMiddleware = require("../middleware/authMiddleware");
-const roleMiddleware = require("../middleware/roleMiddleware");
+const { adminOnly, staffOrAdmin } = require("../middleware/roleMiddleware");
 
 // 🧠 Validate imports
 if (
@@ -43,33 +43,36 @@ if (
   process.exit(1);
 }
 
-// 📘 ADMIN ROUTES (Protected)
+// 📘 SETTINGS ACCESS (Following your requirements)
 
-// View current settings (Staff/Admin)
-router.get("/", authMiddleware, getSettings);
+// View current settings (Staff read-only, Admin full)
+// According to your table: staff = 👁 read-only, waiter = ❌ none, admin = 🛠 full
+router.get("/", authMiddleware, staffOrAdmin, getSettings);
 
-// Admin-only updates
-router.put("/", authMiddleware, roleMiddleware("admin"), updateSettings);
-router.put("/info", authMiddleware, roleMiddleware("admin"), updateRestaurantInfo);
-router.put("/hours", authMiddleware, roleMiddleware("admin"), updateOperatingHours);
-router.put("/notifications", authMiddleware, roleMiddleware("admin"), updateNotifications);
-router.put("/security", authMiddleware, roleMiddleware("admin"), updateSecurity);
-router.put("/system", authMiddleware, roleMiddleware("admin"), updateSystemPreferences);
-router.put("/password", authMiddleware, roleMiddleware("admin"), updatePassword);
+// Admin-only updates (waiter = ❌ none, staff = 👁 read-only, admin = 🛠 full)
+router.put("/", authMiddleware, adminOnly, updateSettings);
+router.put("/info", authMiddleware, adminOnly, updateRestaurantInfo);
+router.put("/hours", authMiddleware, adminOnly, updateOperatingHours);
+router.put("/notifications", authMiddleware, adminOnly, updateNotifications);
+router.put("/security", authMiddleware, adminOnly, updateSecurity);
+router.put("/system", authMiddleware, adminOnly, updateSystemPreferences);
+router.put("/password", authMiddleware, adminOnly, updatePassword);
 
-// 🆕 ABOUT US ADMIN ROUTES
-router.put("/about-us", authMiddleware, roleMiddleware("admin"), updateAboutUs);
+// 🆕 ABOUT US ADMIN ROUTES (Admin only - waiter = ❌ none, staff = 👁 read-only)
+router.put("/about-us", authMiddleware, adminOnly, updateAboutUs);
 
-// 🆕 CONTACT ADMIN ROUTES
-router.put("/contact", authMiddleware, roleMiddleware("admin"), updateContactInfo);
+// 🆕 CONTACT ADMIN ROUTES (Admin only - waiter = ❌ none, staff = 👁 read-only)
+router.put("/contact", authMiddleware, adminOnly, updateContactInfo);
 
 // 🆕 CONTACT SUBMISSIONS ADMIN ROUTES
-router.get("/contact-submissions", authMiddleware, roleMiddleware(["admin", "staff"]), getContactSubmissions);
-router.get("/contact-submissions/:id", authMiddleware, roleMiddleware(["admin", "staff"]), getContactSubmission);
-router.put("/contact-submissions/:id", authMiddleware, roleMiddleware(["admin", "staff"]), updateContactSubmission);
-router.post("/contact-submissions/:id/response", authMiddleware, roleMiddleware(["admin", "staff"]), addResponseToSubmission);
-router.post("/contact-submissions/:id/notes", authMiddleware, roleMiddleware(["admin", "staff"]), addInternalNote);
-router.delete("/contact-submissions/:id", authMiddleware, roleMiddleware("admin"), deleteContactSubmission);
+// Staff can view and manage submissions (read/write for their area)
+// Admin has full access
+router.get("/contact-submissions", authMiddleware, staffOrAdmin, getContactSubmissions);
+router.get("/contact-submissions/:id", authMiddleware, staffOrAdmin, getContactSubmission);
+router.put("/contact-submissions/:id", authMiddleware, staffOrAdmin, updateContactSubmission);
+router.post("/contact-submissions/:id/response", authMiddleware, staffOrAdmin, addResponseToSubmission);
+router.post("/contact-submissions/:id/notes", authMiddleware, staffOrAdmin, addInternalNote);
+router.delete("/contact-submissions/:id", authMiddleware, adminOnly, deleteContactSubmission);
 
 // 📘 PUBLIC ROUTES (No authentication required)
 
