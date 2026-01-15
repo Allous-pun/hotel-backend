@@ -21,6 +21,11 @@ const userSchema = new mongoose.Schema(
       type: String,
       enum: ["guest", "waiter", "staff", "admin"],
       default: "guest",
+    },
+    // 🔹 NEW: User status tracking
+    isActive: {
+      type: Boolean,
+      default: true,
     }
   },
   { timestamps: true }

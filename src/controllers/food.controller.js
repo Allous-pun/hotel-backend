@@ -1,5 +1,6 @@
 const Food = require("../models/Food");
 const FoodOrder = require("../models/FoodOrder");
+const User = require("../models/User");
 
 // List food items
 exports.getFoods = async (req, res) => {
@@ -44,7 +45,7 @@ exports.createFoodOrder = async (req, res) => {
       return res.status(400).json({ message: "Valid table number is required" });
     }
 
-    // 🔹 Check role restrictions
+    // 🔹 Check role restrictions - ONLY admin and staff can't place orders
     if (req.user.role === "staff" || req.user.role === "admin") {
       return res.status(403).json({ 
         message: "Staff and admin cannot place food orders",
@@ -119,7 +120,7 @@ exports.getMyOrders = async (req, res) => {
   }
 };
 
-// Get all orders (staff/admin) - UPDATED with table grouping
+// Get all orders (admin/waiter) - UPDATED with table grouping
 exports.getAllOrders = async (req, res) => {
   try {
     const { status, tableNumber, assignedTo, sortBy = "tableNumber" } = req.query;
@@ -206,56 +207,6 @@ exports.getOrdersByTable = async (req, res) => {
   }
 };
 
-// 🔹 Update order status by orderCode - UPDATED with assignment logic
-exports.updateOrderStatusByCode = async (req, res) => {
-  try {
-    const { orderCode } = req.params;
-    const { status, assignedTo } = req.body;
-
-    const order = await FoodOrder.findOne({ orderCode });
-    if (!order) return res.status(404).json({ message: "Order not found" });
-
-    // If assigning order to waiter
-    if (assignedTo && assignedTo !== order.assignedTo?.toString()) {
-      // Check if assignedTo is a valid waiter or staff
-      const assignedUser = await require("../models/User").findById(assignedTo);
-      if (!assignedUser) {
-        return res.status(404).json({ message: "Assigned user not found" });
-      }
-      if (!["waiter", "staff", "admin"].includes(assignedUser.role)) {
-        return res.status(400).json({ 
-          message: "Can only assign orders to waiters or staff" 
-        });
-      }
-      order.assignedTo = assignedTo;
-      order.assignedAt = new Date();
-    }
-    
-    // Update status
-    if (status) {
-      order.status = status;
-      if (status === "completed" || status === "cancelled") {
-        order.completedAt = new Date();
-      }
-    }
-    
-    await order.save();
-
-    const updatedOrder = await FoodOrder.findOne({ orderCode })
-      .populate("user", "name email")
-      .populate("items.food", "name price")
-      .populate("assignedTo", "name email role");
-
-    res.json({
-      message: "Order updated successfully",
-      order: updatedOrder
-    });
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ message: "Server error", error: err.message });
-  }
-};
-
 // 🔹 Get single order by orderCode
 exports.getOrderByCode = async (req, res) => {
   try {
@@ -275,10 +226,113 @@ exports.getOrderByCode = async (req, res) => {
   }
 };
 
-// 🔹 NEW: Assign order to current waiter (self-assignment)
+// 🔹 Update order status by orderCode - UPDATED with assignment logic
+exports.updateOrderStatusByCode = async (req, res) => {
+  try {
+    const { orderCode } = req.params;
+    const { status, assignedTo } = req.body;
+
+    const order = await FoodOrder.findOne({ orderCode });
+    if (!order) return res.status(404).json({ message: "Order not found" });
+
+    // Assign order if needed - ONLY admin can assign orders
+    if (assignedTo && assignedTo !== order.assignedTo?.toString()) {
+      if (req.user.role !== "admin") {
+        return res.status(403).json({ 
+          message: "Only admin can assign orders to waiters",
+          details: "Waiters can use the self-assign endpoint instead"
+        });
+      }
+      
+      const assignedUser = await User.findById(assignedTo);
+      if (!assignedUser) {
+        return res.status(404).json({ message: "Assigned user not found" });
+      }
+      
+      if (assignedUser.role !== "waiter") {
+        return res.status(400).json({
+          message: "Can only assign orders to waiters",
+        });
+      }
+      
+      order.assignedTo = assignedTo;
+      order.assignedAt = new Date();
+      
+      // Auto-update status to preparing when admin assigns it
+      if (order.status === "pending") {
+        order.status = "preparing";
+      }
+    }
+
+    // Track previous status
+    const oldStatus = order.status;
+
+    // Update status
+    if (status) {
+      order.status = status;
+      if (status === "completed" || status === "cancelled") {
+        order.completedAt = new Date();
+      }
+    }
+
+    await order.save();
+
+    // 🔹 AUTO-CHECK: If order is completed/served, check if table can be cleared
+    let tableActiveOrders = null;
+    let tableCheckMessage = null;
+
+    if (
+      (status === "completed" || status === "served") &&
+      oldStatus !== status
+    ) {
+      tableActiveOrders = await FoodOrder.find({
+        tableNumber: order.tableNumber,
+        tableSection: order.tableSection,
+        status: { $nin: ["completed", "cancelled"] },
+      });
+
+      if (tableActiveOrders.length === 0) {
+        await FoodOrder.updateMany(
+          {
+            tableNumber: order.tableNumber,
+            tableSection: order.tableSection,
+          },
+          {
+            tableStatus: "clearing",
+          }
+        );
+        tableCheckMessage = "Table ready for clearing";
+      }
+    }
+
+    const updatedOrder = await FoodOrder.findOne({ orderCode })
+      .populate("user", "name email")
+      .populate("items.food", "name price")
+      .populate("assignedTo", "name email role");
+
+    res.json({
+      message: "Order updated successfully",
+      order: updatedOrder,
+      tableCheck: tableCheckMessage,
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: "Server error", error: err.message });
+  }
+};
+
+// 🔹 Assign order to current waiter (self-assignment) - WAITER ONLY
 exports.assignOrderToSelf = async (req, res) => {
   try {
     const { orderCode } = req.params;
+    
+    // Check if user is a waiter
+    if (req.user.role !== "waiter") {
+      return res.status(403).json({ 
+        message: "Only waiters can self-assign orders",
+        details: "Admins should use the updateOrderStatusByCode endpoint with assignedTo field"
+      });
+    }
     
     const order = await FoodOrder.findOne({ orderCode });
     if (!order) return res.status(404).json({ message: "Order not found" });
@@ -288,6 +342,14 @@ exports.assignOrderToSelf = async (req, res) => {
       return res.status(400).json({ 
         message: "Order is already assigned",
         assignedTo: order.assignedTo
+      });
+    }
+    
+    // Check if order is pending
+    if (order.status !== "pending") {
+      return res.status(400).json({ 
+        message: `Cannot assign order with status: ${order.status}`,
+        details: "Only pending orders can be self-assigned"
       });
     }
     
@@ -313,9 +375,16 @@ exports.assignOrderToSelf = async (req, res) => {
   }
 };
 
-// 🔹 NEW: Get orders assigned to current waiter
+// 🔹 Get orders assigned to current waiter
 exports.getMyAssignedOrders = async (req, res) => {
   try {
+    // Only waiters can see their assigned orders
+    if (req.user.role !== "waiter") {
+      return res.status(403).json({ 
+        message: "Only waiters can view their assigned orders"
+      });
+    }
+    
     const orders = await FoodOrder.find({ 
       assignedTo: req.user._id,
       status: { $in: ['preparing', 'ready'] } // Active assigned orders
@@ -331,9 +400,16 @@ exports.getMyAssignedOrders = async (req, res) => {
   }
 };
 
-// 🔹 NEW: Get available (unassigned) orders
+// 🔹 Get available (unassigned) orders - WAITER AND ADMIN
 exports.getAvailableOrders = async (req, res) => {
   try {
+    // Only waiters and admin can see available orders
+    if (!["waiter", "admin"].includes(req.user.role)) {
+      return res.status(403).json({ 
+        message: "Only waiters and admin can view available orders"
+      });
+    }
+    
     const orders = await FoodOrder.find({ 
       assignedTo: null,
       status: 'pending'
@@ -349,7 +425,7 @@ exports.getAvailableOrders = async (req, res) => {
   }
 };
 
-// 🔹 NEW: Get table status (which tables are occupied/free)
+// 🔹 Get table status (which tables are occupied/free)
 exports.getTableStatus = async (req, res) => {
   try {
     const { section } = req.query;
@@ -357,7 +433,7 @@ exports.getTableStatus = async (req, res) => {
     // Find all tables with active orders (not completed/cancelled)
     const activeOrders = await FoodOrder.find({
       status: { $nin: ["completed", "cancelled"] }
-    }).select("tableNumber tableSection tableStatus assignedTo status");
+    }).select("tableNumber tableSection tableStatus assignedTo status createdAt");
     
     // Group by table to determine overall table status
     const tableStatus = {};
@@ -406,7 +482,7 @@ exports.getTableStatus = async (req, res) => {
   }
 };
 
-// 🔹 NEW: Check if table can be cleared (all orders served/completed)
+// 🔹 Check if table can be cleared (all orders served/completed)
 exports.checkTableClearance = async (req, res) => {
   try {
     const { tableNumber, tableSection } = req.params;
@@ -441,7 +517,7 @@ exports.checkTableClearance = async (req, res) => {
   }
 };
 
-// 🔹 NEW: Clear table (mark as free)
+// 🔹 Clear table (mark as free)
 exports.clearTable = async (req, res) => {
   try {
     const { tableNumber, tableSection } = req.params;
@@ -489,7 +565,7 @@ exports.clearTable = async (req, res) => {
   }
 };
 
-// 🔹 NEW: Mark table as occupied (when new guests sit)
+// 🔹 Mark table as occupied (when new guests sit)
 exports.occupyTable = async (req, res) => {
   try {
     const { tableNumber, tableSection } = req.body;
@@ -538,74 +614,109 @@ exports.occupyTable = async (req, res) => {
   }
 };
 
-// 🔹 NEW: Auto-check table clearance when order is completed
-// This should be called when an order status changes to "completed" or "served"
-exports.updateOrderStatusByCode = async (req, res) => {
+// 🔹 NEW: Get all waiters (for admin to assign orders)
+exports.getWaiters = async (req, res) => {
+  try {
+    // Only admin can get waiter list
+    if (req.user.role !== "admin") {
+      return res.status(403).json({ 
+        message: "Only admin can view waiter list"
+      });
+    }
+    
+    const waiters = await User.find({ 
+      role: "waiter"
+    }).select("_id name email role isActive createdAt");
+    
+    res.json(waiters);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: "Server error", error: err.message });
+  }
+};
+
+// 🔹 NEW: Admin assign order to specific waiter
+exports.assignOrderToWaiter = async (req, res) => {
   try {
     const { orderCode } = req.params;
-    const { status, assignedTo } = req.body;
-
+    const { waiterId } = req.body;
+    
+    // Only admin can assign orders to waiters
+    if (req.user.role !== "admin") {
+      return res.status(403).json({ 
+        message: "Only admin can assign orders to waiters"
+      });
+    }
+    
+    if (!waiterId) {
+      return res.status(400).json({ 
+        message: "Waiter ID is required" 
+      });
+    }
+    
     const order = await FoodOrder.findOne({ orderCode });
     if (!order) return res.status(404).json({ message: "Order not found" });
-
-    // If assigning order to waiter
-    if (assignedTo && assignedTo !== order.assignedTo?.toString()) {
-      const assignedUser = await require("../models/User").findById(assignedTo);
-      if (!assignedUser) {
-        return res.status(404).json({ message: "Assigned user not found" });
-      }
-      if (!["waiter", "staff", "admin"].includes(assignedUser.role)) {
-        return res.status(400).json({ 
-          message: "Can only assign orders to waiters or staff" 
-        });
-      }
-      order.assignedTo = assignedTo;
-      order.assignedAt = new Date();
+    
+    // Check if waiter exists and is actually a waiter
+    const waiter = await User.findById(waiterId);
+    if (!waiter) {
+      return res.status(404).json({ message: "Waiter not found" });
     }
     
-    // Update status
-    const oldStatus = order.status;
-    if (status) {
-      order.status = status;
-      if (status === "completed" || status === "cancelled") {
-        order.completedAt = new Date();
-      }
+    if (waiter.role !== "waiter") {
+      return res.status(400).json({ 
+        message: "User is not a waiter",
+        details: `User role: ${waiter.role}`
+      });
     }
+    
+    // Check if waiter is active
+    if (waiter.isActive === false) {
+      return res.status(400).json({ 
+        message: "Waiter account is deactivated",
+        details: "Please assign to an active waiter"
+      });
+    }
+    
+    // Check if order is already assigned
+    if (order.assignedTo && order.assignedTo.toString() === waiterId) {
+      return res.status(400).json({ 
+        message: "Order is already assigned to this waiter"
+      });
+    }
+    
+    // Check if order is pending
+    if (order.status !== "pending") {
+      return res.status(400).json({ 
+        message: `Cannot assign order with status: ${order.status}`,
+        details: "Only pending orders can be assigned"
+      });
+    }
+    
+    // Assign order to waiter
+    order.assignedTo = waiterId;
+    order.assignedAt = new Date();
+    order.status = "preparing"; // Auto-update status
+    order.assignedBy = req.user._id; // Track who assigned it
     
     await order.save();
-
-    // 🔹 AUTO-CHECK: If order is completed/served, check if table can be cleared
-    if ((status === "completed" || status === "served") && oldStatus !== status) {
-      // Check if all orders for this table are completed/served
-      const tableActiveOrders = await FoodOrder.find({
-        tableNumber: order.tableNumber,
-        tableSection: order.tableSection,
-        status: { $nin: ["completed", "cancelled"] }
-      });
-      
-      if (tableActiveOrders.length === 0) {
-        // All orders for this table are done, mark table as "clearing"
-        await FoodOrder.updateMany(
-          {
-            tableNumber: order.tableNumber,
-            tableSection: order.tableSection
-          },
-          {
-            tableStatus: "clearing"
-          }
-        );
-      }
-    }
-
+    
     const updatedOrder = await FoodOrder.findOne({ orderCode })
       .populate("user", "name email")
       .populate("items.food", "name price")
-      .populate("assignedTo", "name email role");
-
+      .populate("assignedTo", "name email role")
+      .populate("assignedBy", "name email role");
+    
     res.json({
-      message: "Order updated successfully",
+      message: `Order successfully assigned to ${waiter.name}`,
       order: updatedOrder,
-      tableCheck: tableActiveOrders?.length === 0 ? "Table ready for clearing" : null
+      assignmentDetails: {
+        assignedBy: req.user.name,
+        assignedTo: waiter.name,
+        assignedAt: order.assignedAt,
+        previousStatus: "pending",
+        newStatus: "preparing"
+      }
     });
   } catch (err) {
     console.error(err);

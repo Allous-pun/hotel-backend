@@ -14,11 +14,12 @@ const {
   assignOrderToSelf,
   getMyAssignedOrders,
   getAvailableOrders,
-  // 🔹 NEW: Table management functions
   getTableStatus,
   checkTableClearance,
   clearTable,
-  occupyTable
+  occupyTable,
+  getWaiters,              // NEW
+  assignOrderToWaiter      // NEW
 } = require("../controllers/food.controller");
 const authMiddleware = require("../middleware/authMiddleware");
 const { adminOnly, staffOrAdmin, waiterOrAbove } = require("../middleware/roleMiddleware");
@@ -44,11 +45,17 @@ router.get("/orders/my", authMiddleware, getMyOrders);
 // Waiter: get my assigned orders
 router.get("/orders/my-assigned", authMiddleware, waiterOrAbove, getMyAssignedOrders);
 
-// Waiter: get available (unassigned) orders
+// Waiter/Admin: get available (unassigned) orders
 router.get("/orders/available", authMiddleware, waiterOrAbove, getAvailableOrders);
 
 // Waiter: assign order to self
 router.post("/orders/:orderCode/assign-self", authMiddleware, waiterOrAbove, assignOrderToSelf);
+
+// Admin: get all waiters
+router.get("/waiters", authMiddleware, adminOnly, getWaiters);
+
+// Admin: assign order to specific waiter
+router.post("/orders/:orderCode/assign-waiter", authMiddleware, adminOnly, assignOrderToWaiter);
 
 // Waiter/Staff/Admin: get all orders
 router.get("/orders", authMiddleware, waiterOrAbove, getAllOrders);

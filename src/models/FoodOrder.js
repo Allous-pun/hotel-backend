@@ -61,6 +61,13 @@ const foodOrderSchema = new mongoose.Schema(
       default: null,
     },
     
+    // 🔹 NEW: Track who assigned the order (admin)
+    assignedBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      default: null,
+    },
+    
     // Order status
     status: {
       type: String,
@@ -92,7 +99,6 @@ foodOrderSchema.pre("save", function (next) {
 });
 
 // 🔹 Indexes for faster queries
-// REMOVED duplicate: foodOrderSchema.index({ orderCode: 1 }); // This is duplicate of unique: true
 foodOrderSchema.index({ tableNumber: 1, status: 1 });
 foodOrderSchema.index({ assignedTo: 1, status: 1 });
 foodOrderSchema.index({ createdAt: -1 });
