@@ -70,37 +70,43 @@ exports.createUser = async (req, res) => {
   }
 };
 
-// 🔹 ADMIN: Update user (activate/deactivate, change role)
+// 🔹 ADMIN: Update user (PUT / PATCH)
 exports.updateUser = async (req, res) => {
   try {
     const { id } = req.params;
     const updates = req.body;
 
-    // Check if user exists
     const user = await User.findById(id);
     if (!user) return res.status(404).json({ message: "User not found" });
 
-    // Prevent non-admin from updating users
+    // Only admin
     if (req.user.role !== "admin") {
       return res.status(403).json({ message: "Only admin can update users" });
     }
 
-    // Prevent admin from deactivating themselves
-    if (id === req.user._id.toString() && updates.isActive === false) {
-      return res.status(400).json({ message: "Cannot deactivate your own account" });
+    // Prevent admin updating self status/role
+    if (id === req.user._id.toString()) {
+      if (updates.isActive === false) {
+        return res.status(400).json({ message: "Cannot deactivate your own account" });
+      }
+      if (updates.role && updates.role !== "admin") {
+        return res.status(400).json({ message: "Cannot change your own role" });
+      }
     }
 
-    // Prevent changing role to admin via this endpoint
+    // Prevent assigning admin role
     if (updates.role === "admin") {
-      return res.status(403).json({ 
-        message: "Admin accounts can only be created via /api/auth/create-admin with secret key" 
+      return res.status(403).json({
+        message: "Admin accounts can only be created via /api/auth/create-admin",
       });
     }
 
-    // Update user
-    Object.keys(updates).forEach(key => {
-      if (key !== "password") { // Password updates handled separately
-        user[key] = updates[key];
+    // Allowed fields
+    const allowedFields = ["name", "email", "role", "isActive"];
+
+    allowedFields.forEach((field) => {
+      if (updates[field] !== undefined) {
+        user[field] = updates[field];
       }
     });
 
@@ -112,7 +118,7 @@ exports.updateUser = async (req, res) => {
       email: user.email,
       role: user.role,
       isActive: user.isActive,
-      message: "User updated successfully"
+      message: "User updated successfully",
     });
   } catch (err) {
     console.error(err);

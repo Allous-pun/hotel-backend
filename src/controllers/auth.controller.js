@@ -123,12 +123,18 @@ exports.createAdminUser = async (req, res) => {
 exports.login = async (req, res) => {
   try {
     const { email, password } = req.body;
+
     if (!email || !password) {
       return res.status(400).json({ message: "Email and password required" });
     }
 
     const user = await User.findOne({ email });
     if (!user) return res.status(401).json({ message: "Invalid credentials" });
+
+    // 🔒 BLOCK INACTIVE USERS
+    if (!user.isActive) {
+      return res.status(403).json({ message: "Account is deactivated. Contact admin." });
+    }
 
     const isMatch = await bcrypt.compare(password, user.password);
     if (!isMatch) return res.status(401).json({ message: "Invalid credentials" });
@@ -145,6 +151,7 @@ exports.login = async (req, res) => {
     res.status(500).json({ message: "Server error", error: err.message });
   }
 };
+
 
 // 🔹 Get logged-in user profile
 exports.getProfile = async (req, res) => {
