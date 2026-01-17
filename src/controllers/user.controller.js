@@ -1,14 +1,20 @@
 // src/controllers/user.controller.js
 const User = require("../models/User");
 
-// 🔹 Get all users (admin only)
-exports.getAllUsers = async (req, res) => {
+exports.getAllUsers = async (req, res, next) => {
   try {
-    const users = await User.find().select("-password");
-    res.json(users);
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ message: "Server error" });
+    const { role, isActive } = req.query;
+
+    const filter = {};
+
+    if (role) filter.role = role;
+    if (isActive !== undefined) filter.isActive = isActive === "true";
+
+    const users = await User.find(filter).sort({ createdAt: -1 });
+
+    res.status(200).json(users);
+  } catch (error) {
+    next(error);
   }
 };
 
