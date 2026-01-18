@@ -28,28 +28,83 @@ connectDB();
 // Initialize app
 const app = express();
 
-// CORS Configuration
+// CORS Configuration - Fixed
+const allowedOrigins = [
+  'http://localhost:5173',    // Vite dev server
+  'http://localhost:5174',    // Alternate Vite port
+  'http://localhost:3000',    // Create React App
+  'http://localhost:5000',    // Backend itself (for testing)
+  'https://hotel-backend-vdra.onrender.com', // Your backend domain
+  process.env.FRONTEND_URL,   // From environment variable
+].filter(Boolean); // Remove any undefined values
+
 const corsOptions = {
-  origin: process.env.FRONTEND_URL || "http://localhost:5173",
+  origin: function (origin, callback) {
+    // Allow requests with no origin (like mobile apps, curl, postman)
+    if (!origin) return callback(null, true);
+    
+    // Check if origin is in allowed list
+    if (allowedOrigins.includes(origin)) {
+      callback(null, true);
+    } else {
+      // For development, you can be more permissive
+      if (process.env.NODE_ENV === 'development') {
+        console.log(`Allowing origin in development: ${origin}`);
+        callback(null, true);
+      } else {
+        console.log(`Blocked by CORS: ${origin}`);
+        callback(new Error('Not allowed by CORS'));
+      }
+    }
+  },
   credentials: true,
-  optionsSuccessStatus: 200
+  optionsSuccessStatus: 200,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept']
 };
 
 // Global Middleware
 app.use(cors(corsOptions));
+
+// Add explicit CORS headers for preflight requests
+app.use((req, res, next) => {
+  // Get the origin from the request
+  const origin = req.headers.origin;
+  
+  // Check if origin is in allowed list
+  if (allowedOrigins.includes(origin) || process.env.NODE_ENV === 'development') {
+    res.header('Access-Control-Allow-Origin', origin || '*');
+  }
+  
+  res.header('Access-Control-Allow-Credentials', 'true');
+  res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
+  res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS, PATCH');
+  
+  // Handle preflight requests
+  if (req.method === 'OPTIONS') {
+    return res.sendStatus(200);
+  }
+  
+  next();
+});
+
 app.use(helmet());
 app.use(morgan("dev"));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// Security headers
+// Security headers - Updated CSP to allow more flexibility
 app.use(helmet.contentSecurityPolicy({
   directives: {
     defaultSrc: ["'self'"],
-    styleSrc: ["'self'", "'unsafe-inline'"],
-    scriptSrc: ["'self'"],
-    imgSrc: ["'self'", "data:", "https:"],
-    connectSrc: ["'self'"]
+    styleSrc: ["'self'", "'unsafe-inline'", "https:"],
+    scriptSrc: ["'self'", "'unsafe-inline'", "https:"],
+    imgSrc: ["'self'", "data:", "https:", "http:"],
+    connectSrc: ["'self'", "https:", "http:", "ws:", "wss:"],
+    fontSrc: ["'self'", "https:", "data:"],
+    objectSrc: ["'none'"],
+    mediaSrc: ["'self'"],
+    frameSrc: ["'self'"]
   }
 }));
 
@@ -57,10 +112,14 @@ app.use(helmet.contentSecurityPolicy({
 const rateLimit = require("express-rate-limit");
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 100, // limit each IP to 100 requests per windowMs
+  max: 1000, // Increased limit for development
   message: "Too many requests from this IP, please try again later.",
   standardHeaders: true,
   legacyHeaders: false,
+  skip: (req) => {
+    // Skip rate limiting for health checks and certain paths
+    return req.path === '/health' || req.path === '/';
+  }
 });
 
 // Apply rate limiting to all API routes
@@ -73,6 +132,11 @@ app.get("/", (req, res) => {
     status: "running",
     version: "1.0.0",
     timestamp: new Date().toISOString(),
+    environment: process.env.NODE_ENV || "development",
+    cors: {
+      allowedOrigins: allowedOrigins,
+      frontendUrl: process.env.FRONTEND_URL
+    },
     endpoints: {
       auth: "/api/auth",
       users: "/api/users",
@@ -91,7 +155,19 @@ app.get("/health", (req, res) => {
   res.status(200).json({
     status: "healthy",
     timestamp: new Date().toISOString(),
-    uptime: process.uptime()
+    uptime: process.uptime(),
+    memory: process.memoryUsage(),
+    environment: process.env.NODE_ENV
+  });
+});
+
+// CORS test endpoint
+app.get("/cors-test", (req, res) => {
+  res.json({
+    message: "CORS test successful",
+    origin: req.headers.origin,
+    allowedOrigins: allowedOrigins,
+    timestamp: new Date().toISOString()
   });
 });
 
@@ -100,6 +176,11 @@ app.get("/api/docs", (req, res) => {
   res.json({
     documentation: "API Documentation",
     baseUrl: process.env.BASE_URL || "http://localhost:5000",
+    frontendUrl: process.env.FRONTEND_URL || "http://localhost:5173",
+    cors: {
+      allowedOrigins: allowedOrigins,
+      methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"]
+    },
     authentication: "All protected routes require JWT token in Authorization header",
     endpoints: {
       auth: {
@@ -141,7 +222,7 @@ app.use("/api/rooms", roomRoutes);
 app.use("/api/bookings", bookingRoutes);
 app.use("/api/foods", foodRoutes);
 app.use("/api/events", eventRoutes);
-app.use("/api/tables", tableRoutes); // NEW: Table routes
+app.use("/api/tables", tableRoutes);
 app.use("/api/settings", settingRoutes);
 
 // 404 Handler for undefined routes
@@ -149,7 +230,8 @@ app.use((req, res, next) => {
   res.status(404).json({
     success: false,
     message: `Route not found: ${req.method} ${req.originalUrl}`,
-    error: "Not Found"
+    error: "Not Found",
+    timestamp: new Date().toISOString()
   });
 });
 
