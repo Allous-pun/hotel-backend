@@ -30,13 +30,14 @@ const app = express();
 
 // CORS Configuration - Fixed
 const allowedOrigins = [
-  'http://localhost:5173',    // Vite dev server
+  'http://localhost:5173',    // Vite default port
   'http://localhost:5174',    // Alternate Vite port
-  'http://localhost:3000',    // Create React App
-  'http://localhost:5000',    // Backend itself (for testing)
+  'http://localhost:3000',    // Create React App default
+  'http://localhost:8080',    // Another common port
+  'http://localhost:5000',    // Backend itself
   'https://hotel-backend-vdra.onrender.com', // Your backend domain
   process.env.FRONTEND_URL,   // From environment variable
-].filter(Boolean); // Remove any undefined values
+].filter(Boolean);
 
 const corsOptions = {
   origin: function (origin, callback) {
@@ -168,50 +169,6 @@ app.get("/cors-test", (req, res) => {
     origin: req.headers.origin,
     allowedOrigins: allowedOrigins,
     timestamp: new Date().toISOString()
-  });
-});
-
-// API Documentation endpoint
-app.get("/api/docs", (req, res) => {
-  res.json({
-    documentation: "API Documentation",
-    baseUrl: process.env.BASE_URL || "http://localhost:5000",
-    frontendUrl: process.env.FRONTEND_URL || "http://localhost:5173",
-    cors: {
-      allowedOrigins: allowedOrigins,
-      methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"]
-    },
-    authentication: "All protected routes require JWT token in Authorization header",
-    endpoints: {
-      auth: {
-        login: "POST /api/auth/login",
-        register: "POST /api/auth/register",
-        logout: "POST /api/auth/logout",
-        refresh: "POST /api/auth/refresh-token"
-      },
-      users: {
-        getAll: "GET /api/users",
-        getProfile: "GET /api/users/profile",
-        updateProfile: "PUT /api/users/profile",
-        updateUser: "PUT /api/users/:id (admin only)",
-        deleteUser: "DELETE /api/users/:id (admin only)"
-      },
-      foods: {
-        getFoods: "GET /api/foods",
-        getCategories: "GET /api/foods/categories",
-        createOrder: "POST /api/foods/order",
-        guestOrder: "POST /api/foods/order/guest",
-        myOrders: "GET /api/foods/orders/my",
-        trackOrder: "GET /api/foods/orders/track/:orderCode"
-      },
-      tables: {
-        getTables: "GET /api/tables",
-        getAvailable: "GET /api/tables/available",
-        createTable: "POST /api/tables (admin only)",
-        occupyTable: "POST /api/tables/:id/occupy",
-        clearTable: "POST /api/tables/:id/clear"
-      }
-    }
   });
 });
 
