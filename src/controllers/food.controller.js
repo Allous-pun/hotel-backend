@@ -1,725 +1,442 @@
 const Food = require("../models/Food");
+const FoodCategory = require("../models/FoodCategory");
 const FoodOrder = require("../models/FoodOrder");
-const User = require("../models/User");
 
-// List food items
+// @desc    Get all food items (public with filters)
+// @route   GET /api/foods
+// @access  Public
 exports.getFoods = async (req, res) => {
   try {
-    const foods = await Food.find();
-    res.json(foods);
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ message: "Server error" });
-  }
-};
-
-// Create food item (admin/staff)
-exports.createFood = async (req, res) => {
-  try {
-    const food = await Food.create(req.body);
-    res.status(201).json(food);
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ message: "Server error" });
-  }
-};
-
-// Create a food order (user) - UPDATED with table info
-exports.createFoodOrder = async (req, res) => {
-  try {
-    const { items, totalPrice, tableNumber, tableSection } = req.body;
+    const { 
+      category, 
+      availableOnly = true, 
+      vegetarian, 
+      vegan, 
+      spicy,
+      minPrice, 
+      maxPrice, 
+      search,
+      sortBy = 'name',
+      sortOrder = 'asc',
+      page = 1,
+      limit = 20
+    } = req.query;
     
-    // Validate required fields
-    if (!items || !Array.isArray(items) || items.length === 0) {
-      return res.status(400).json({ message: "Order items are required" });
-    }
-    
-    // 🔹 Table info is now mandatory
-    if (!tableNumber) {
-      return res.status(400).json({ message: "Table number is required" });
-    }
-    
-    // Validate table number is a positive integer
-    const tableNum = parseInt(tableNumber);
-    if (isNaN(tableNum) || tableNum <= 0) {
-      return res.status(400).json({ message: "Valid table number is required" });
-    }
-
-    // 🔹 Check role restrictions - ONLY admin and staff can't place orders
-    if (req.user.role === "staff" || req.user.role === "admin") {
-      return res.status(403).json({ 
-        message: "Staff and admin cannot place food orders",
-        details: "Please use a guest or waiter account to place orders"
-      });
-    }
-    
-    const order = await FoodOrder.create({
-      user: req.user._id,
-      items,
-      totalPrice,
-      tableNumber: tableNum,
-      tableSection: tableSection || "Main Hall", // Default section
-      assignedTo: null, // Will be assigned when a waiter picks it up
-    });
-
-    res.status(201).json({
-      message: "Order placed successfully",
-      order: {
-        _id: order._id,
-        orderCode: order.orderCode,
-        tableNumber: order.tableNumber,
-        tableSection: order.tableSection,
-        status: order.status,
-        createdAt: order.createdAt
-      }
-    });
-  } catch (err) {
-    console.error(err);
-    if (err.code === 11000) {
-      return res.status(409).json({ message: "Duplicate order code, try again" });
-    }
-    res.status(500).json({ message: "Server error", error: err.message });
-  }
-};
-
-// Update food item
-exports.updateFood = async (req, res) => {
-  try {
-    const food = await Food.findByIdAndUpdate(req.params.id, req.body, { new: true });
-    if (!food) return res.status(404).json({ message: "Food not found" });
-    res.json(food);
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ message: "Server error" });
-  }
-};
-
-// Delete food item
-exports.deleteFood = async (req, res) => {
-  try {
-    const food = await Food.findByIdAndDelete(req.params.id);
-    if (!food) return res.status(404).json({ message: "Food not found" });
-    res.json({ message: "Food deleted successfully" });
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ message: "Server error" });
-  }
-};
-
-// Get orders for logged-in user
-exports.getMyOrders = async (req, res) => {
-  try {
-    const orders = await FoodOrder.find({ user: req.user._id })
-      .populate("items.food", "name price")
-      .populate("assignedTo", "name email")
-      .sort({ createdAt: -1 });
-    res.json(orders);
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ message: "Server error" });
-  }
-};
-
-// Get all orders (admin/waiter) - UPDATED with table grouping
-exports.getAllOrders = async (req, res) => {
-  try {
-    const { status, tableNumber, assignedTo, sortBy = "tableNumber" } = req.query;
-    
+    // Build query
     let query = {};
     
-    // Filter by status
-    if (status && status !== 'all') {
-      query.status = status;
+    // Filter by category
+    if (category && category !== 'all') {
+      query.category = category;
     }
     
-    // Filter by table number
-    if (tableNumber) {
-      query.tableNumber = parseInt(tableNumber);
+    // Filter by availability
+    if (availableOnly === 'true') {
+      query.isAvailable = true;
     }
     
-    // Filter by assigned waiter
-    if (assignedTo === 'unassigned') {
-      query.assignedTo = null;
-    } else if (assignedTo && assignedTo !== 'all') {
-      query.assignedTo = assignedTo;
+    // Filter by dietary preferences
+    if (vegetarian === 'true') {
+      query.isVegetarian = true;
     }
     
-    let sortOption = {};
+    if (vegan === 'true') {
+      query.isVegan = true;
+    }
+    
+    if (spicy === 'true') {
+      query.isSpicy = true;
+    }
+    
+    // Price range filter
+    if (minPrice || maxPrice) {
+      query.price = {};
+      if (minPrice) query.price.$gte = Number(minPrice);
+      if (maxPrice) query.price.$lte = Number(maxPrice);
+    }
+    
+    // Search filter
+    if (search) {
+      query.$or = [
+        { name: { $regex: search, $options: 'i' } },
+        { description: { $regex: search, $options: 'i' } },
+        { tags: { $regex: search, $options: 'i' } }
+      ];
+    }
+    
+    // Sort options
+    const sortOptions = {};
     switch(sortBy) {
-      case 'tableNumber':
-        sortOption = { tableNumber: 1, createdAt: -1 };
+      case 'name':
+        sortOptions.name = sortOrder === 'desc' ? -1 : 1;
         break;
-      case 'recent':
-        sortOption = { createdAt: -1 };
+      case 'price':
+        sortOptions.price = sortOrder === 'desc' ? -1 : 1;
         break;
-      case 'status':
-        sortOption = { status: 1, createdAt: -1 };
+      case 'newest':
+        sortOptions.createdAt = -1;
         break;
       default:
-        sortOption = { tableNumber: 1, createdAt: -1 };
+        sortOptions.sortOrder = 1;
+        sortOptions.name = 1;
     }
     
-    const orders = await FoodOrder.find(query)
-      .populate("user", "name email")
-      .populate("items.food", "name price")
-      .populate("assignedTo", "name email role")
-      .sort(sortOption);
-
-    res.json(orders);
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ message: "Server error", error: err.message });
+    // Pagination
+    const skip = (Number(page) - 1) * Number(limit);
+    
+    const [foods, total] = await Promise.all([
+      Food.find(query)
+        .populate("category", "name description")
+        .populate("createdBy", "name email")
+        .sort(sortOptions)
+        .skip(skip)
+        .limit(Number(limit)),
+      Food.countDocuments(query)
+    ]);
+    
+    res.json({
+      foods,
+      pagination: {
+        total,
+        page: Number(page),
+        limit: Number(limit),
+        pages: Math.ceil(total / Number(limit))
+      }
+    });
+  } catch (error) {
+    console.error("Get foods error:", error);
+    res.status(500).json({ 
+      message: "Server error", 
+      error: error.message 
+    });
   }
 };
 
-// 🔹 Get orders grouped by table
-exports.getOrdersByTable = async (req, res) => {
+// @desc    Get single food item
+// @route   GET /api/foods/:id
+// @access  Public
+exports.getFoodById = async (req, res) => {
   try {
-    const orders = await FoodOrder.find({
-      status: { $in: ['pending', 'preparing', 'ready'] } // Active orders only
-    })
-      .populate("user", "name email")
-      .populate("items.food", "name price")
-      .populate("assignedTo", "name email role")
-      .sort({ tableNumber: 1, createdAt: -1 });
+    const { id } = req.params;
     
-    // Group orders by table
-    const groupedOrders = {};
-    orders.forEach(order => {
-      const tableKey = `Table ${order.tableNumber} - ${order.tableSection}`;
-      if (!groupedOrders[tableKey]) {
-        groupedOrders[tableKey] = {
-          tableNumber: order.tableNumber,
-          tableSection: order.tableSection,
-          orders: []
-        };
-      }
-      groupedOrders[tableKey].orders.push(order);
+    const food = await Food.findById(id)
+      .populate("category", "name description")
+      .populate("createdBy", "name email")
+      .populate("updatedBy", "name email");
+    
+    if (!food) {
+      return res.status(404).json({ message: "Food item not found" });
+    }
+    
+    res.json(food);
+  } catch (error) {
+    console.error("Get food by ID error:", error);
+    res.status(500).json({ 
+      message: "Server error", 
+      error: error.message 
+    });
+  }
+};
+
+// @desc    Create food item (admin only)
+// @route   POST /api/foods
+// @access  Admin
+exports.createFood = async (req, res) => {
+  try {
+    const {
+      name,
+      description,
+      price,
+      category,
+      images,
+      ingredients,
+      preparationTime,
+      isVegetarian,
+      isVegan,
+      isSpicy,
+      spiceLevel,
+      calories,
+      tags,
+      sortOrder
+    } = req.body;
+    
+    // Validate required fields
+    if (!name || !price || !category) {
+      return res.status(400).json({ 
+        message: "Name, price, and category are required" 
+      });
+    }
+    
+    // Validate category exists
+    const categoryExists = await FoodCategory.findById(category);
+    if (!categoryExists) {
+      return res.status(400).json({ message: "Category not found" });
+    }
+    
+    // Check for duplicate food name
+    const existingFood = await Food.findOne({ 
+      name: { $regex: new RegExp(`^${name}$`, 'i') },
+      category 
     });
     
-    // Convert to array format
-    const result = Object.values(groupedOrders);
-    
-    res.json(result);
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ message: "Server error", error: err.message });
-  }
-};
-
-// 🔹 Get single order by orderCode
-exports.getOrderByCode = async (req, res) => {
-  try {
-    const { orderCode } = req.params;
-
-    const order = await FoodOrder.findOne({ orderCode })
-      .populate("user", "name email")
-      .populate("items.food", "name price")
-      .populate("assignedTo", "name email role");
-
-    if (!order) return res.status(404).json({ message: "Order not found" });
-
-    res.json(order);
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ message: "Server error", error: err.message });
-  }
-};
-
-// 🔹 Update order status by orderCode - UPDATED with assignment logic
-exports.updateOrderStatusByCode = async (req, res) => {
-  try {
-    const { orderCode } = req.params;
-    const { status, assignedTo } = req.body;
-
-    const order = await FoodOrder.findOne({ orderCode });
-    if (!order) return res.status(404).json({ message: "Order not found" });
-
-    // Assign order if needed - ONLY admin can assign orders
-    if (assignedTo && assignedTo !== order.assignedTo?.toString()) {
-      if (req.user.role !== "admin") {
-        return res.status(403).json({ 
-          message: "Only admin can assign orders to waiters",
-          details: "Waiters can use the self-assign endpoint instead"
-        });
-      }
-      
-      const assignedUser = await User.findById(assignedTo);
-      if (!assignedUser) {
-        return res.status(404).json({ message: "Assigned user not found" });
-      }
-      
-      if (assignedUser.role !== "waiter") {
-        return res.status(400).json({
-          message: "Can only assign orders to waiters",
-        });
-      }
-      
-      order.assignedTo = assignedTo;
-      order.assignedAt = new Date();
-      
-      // Auto-update status to preparing when admin assigns it
-      if (order.status === "pending") {
-        order.status = "preparing";
-      }
-    }
-
-    // Track previous status
-    const oldStatus = order.status;
-
-    // Update status
-    if (status) {
-      order.status = status;
-      if (status === "completed" || status === "cancelled") {
-        order.completedAt = new Date();
-      }
-    }
-
-    await order.save();
-
-    // 🔹 AUTO-CHECK: If order is completed/served, check if table can be cleared
-    let tableActiveOrders = null;
-    let tableCheckMessage = null;
-
-    if (
-      (status === "completed" || status === "served") &&
-      oldStatus !== status
-    ) {
-      tableActiveOrders = await FoodOrder.find({
-        tableNumber: order.tableNumber,
-        tableSection: order.tableSection,
-        status: { $nin: ["completed", "cancelled"] },
+    if (existingFood) {
+      return res.status(409).json({ 
+        message: "Food with this name already exists in this category" 
       });
+    }
+    
+    // Create new food
+    const food = new Food({
+      name,
+      description: description || "",
+      price: Number(price),
+      originalPrice: req.body.originalPrice || Number(price),
+      category,
+      images: images || [],
+      ingredients: ingredients || [],
+      preparationTime: preparationTime || 15,
+      isAvailable: true,
+      isVegetarian: isVegetarian || false,
+      isVegan: isVegan || false,
+      isSpicy: isSpicy || false,
+      spiceLevel: spiceLevel || 0,
+      calories: calories || null,
+      tags: tags || [],
+      sortOrder: sortOrder || 0,
+      createdBy: req.user._id
+    });
+    
+    await food.save();
+    await food.populate("category", "name description");
+    await food.populate("createdBy", "name email");
+    
+    res.status(201).json({
+      message: "Food item created successfully",
+      food
+    });
+  } catch (error) {
+    console.error("Create food error:", error);
+    res.status(500).json({ 
+      message: "Server error", 
+      error: error.message 
+    });
+  }
+};
 
-      if (tableActiveOrders.length === 0) {
-        await FoodOrder.updateMany(
-          {
-            tableNumber: order.tableNumber,
-            tableSection: order.tableSection,
+// @desc    Update food item (admin only)
+// @route   PUT /api/foods/:id
+// @access  Admin
+exports.updateFood = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const updates = req.body;
+    
+    const food = await Food.findById(id);
+    
+    if (!food) {
+      return res.status(404).json({ message: "Food item not found" });
+    }
+    
+    // Validate category if being updated
+    if (updates.category && updates.category !== food.category.toString()) {
+      const categoryExists = await FoodCategory.findById(updates.category);
+      if (!categoryExists) {
+        return res.status(400).json({ message: "Category not found" });
+      }
+    }
+    
+    // Check for duplicate name if name/category is being updated
+    if ((updates.name && updates.name !== food.name) || 
+        (updates.category && updates.category !== food.category.toString())) {
+      const query = {
+        name: { $regex: new RegExp(`^${updates.name || food.name}$`, 'i') },
+        category: updates.category || food.category,
+        _id: { $ne: id }
+      };
+      
+      const existingFood = await Food.findOne(query);
+      
+      if (existingFood) {
+        return res.status(409).json({ 
+          message: "Food with this name already exists in this category" 
+        });
+      }
+    }
+    
+    // Update food
+    Object.keys(updates).forEach(key => {
+      food[key] = updates[key];
+    });
+    
+    food.updatedBy = req.user._id;
+    food.updatedAt = new Date();
+    
+    await food.save();
+    await food.populate("category", "name description");
+    await food.populate("createdBy", "name email");
+    await food.populate("updatedBy", "name email");
+    
+    res.json({
+      message: "Food item updated successfully",
+      food
+    });
+  } catch (error) {
+    console.error("Update food error:", error);
+    res.status(500).json({ 
+      message: "Server error", 
+      error: error.message 
+    });
+  }
+};
+
+// @desc    Delete food item (admin only)
+// @route   DELETE /api/foods/:id
+// @access  Admin
+exports.deleteFood = async (req, res) => {
+  try {
+    const { id } = req.params;
+    
+    const food = await Food.findById(id);
+    
+    if (!food) {
+      return res.status(404).json({ message: "Food item not found" });
+    }
+    
+    // Check if food is in any active orders
+    const activeOrders = await FoodOrder.countDocuments({
+      "items.food": id,
+      status: { $nin: ["completed", "cancelled"] }
+    });
+    
+    if (activeOrders > 0) {
+      return res.status(400).json({ 
+        message: "Cannot delete food item with active orders",
+        activeOrders
+      });
+    }
+    
+    await food.deleteOne();
+    
+    res.json({
+      message: "Food item deleted successfully",
+      deletedFood: food
+    });
+  } catch (error) {
+    console.error("Delete food error:", error);
+    res.status(500).json({ 
+      message: "Server error", 
+      error: error.message 
+    });
+  }
+};
+
+// @desc    Toggle food availability (admin only)
+// @route   PATCH /api/foods/:id/toggle-availability
+// @access  Admin
+exports.toggleAvailability = async (req, res) => {
+  try {
+    const { id } = req.params;
+    
+    const food = await Food.findById(id);
+    
+    if (!food) {
+      return res.status(404).json({ message: "Food item not found" });
+    }
+    
+    food.isAvailable = !food.isAvailable;
+    food.updatedBy = req.user._id;
+    food.updatedAt = new Date();
+    
+    await food.save();
+    
+    res.json({
+      message: `Food item ${food.isAvailable ? 'activated' : 'deactivated'} successfully`,
+      food
+    });
+  } catch (error) {
+    console.error("Toggle availability error:", error);
+    res.status(500).json({ 
+      message: "Server error", 
+      error: error.message 
+    });
+  }
+};
+
+// @desc    Get food statistics (admin only)
+// @route   GET /api/foods/stats
+// @access  Admin
+exports.getFoodStats = async (req, res) => {
+  try {
+    const stats = await Food.aggregate([
+      {
+        $group: {
+          _id: null,
+          totalItems: { $sum: 1 },
+          availableItems: { 
+            $sum: { $cond: ["$isAvailable", 1, 0] }
           },
-          {
-            tableStatus: "clearing",
+          avgPrice: { $avg: "$price" },
+          minPrice: { $min: "$price" },
+          maxPrice: { $max: "$price" },
+          vegetarianCount: { 
+            $sum: { $cond: ["$isVegetarian", 1, 0] }
+          },
+          veganCount: { 
+            $sum: { $cond: ["$isVegan", 1, 0] }
+          },
+          spicyCount: { 
+            $sum: { $cond: ["$isSpicy", 1, 0] }
           }
-        );
-        tableCheckMessage = "Table ready for clearing";
-      }
-    }
-
-    const updatedOrder = await FoodOrder.findOne({ orderCode })
-      .populate("user", "name email")
-      .populate("items.food", "name price")
-      .populate("assignedTo", "name email role");
-
-    res.json({
-      message: "Order updated successfully",
-      order: updatedOrder,
-      tableCheck: tableCheckMessage,
-    });
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ message: "Server error", error: err.message });
-  }
-};
-
-// 🔹 Assign order to current waiter (self-assignment) - WAITER ONLY
-exports.assignOrderToSelf = async (req, res) => {
-  try {
-    const { orderCode } = req.params;
-    
-    // Check if user is a waiter
-    if (req.user.role !== "waiter") {
-      return res.status(403).json({ 
-        message: "Only waiters can self-assign orders",
-        details: "Admins should use the updateOrderStatusByCode endpoint with assignedTo field"
-      });
-    }
-    
-    const order = await FoodOrder.findOne({ orderCode });
-    if (!order) return res.status(404).json({ message: "Order not found" });
-    
-    // Check if order is already assigned
-    if (order.assignedTo) {
-      return res.status(400).json({ 
-        message: "Order is already assigned",
-        assignedTo: order.assignedTo
-      });
-    }
-    
-    // Check if order is pending
-    if (order.status !== "pending") {
-      return res.status(400).json({ 
-        message: `Cannot assign order with status: ${order.status}`,
-        details: "Only pending orders can be self-assigned"
-      });
-    }
-    
-    // Assign to current user
-    order.assignedTo = req.user._id;
-    order.assignedAt = new Date();
-    order.status = "preparing"; // Auto-update status
-    
-    await order.save();
-    
-    const updatedOrder = await FoodOrder.findOne({ orderCode })
-      .populate("user", "name email")
-      .populate("items.food", "name price")
-      .populate("assignedTo", "name email role");
-    
-    res.json({
-      message: "Order assigned to you successfully",
-      order: updatedOrder
-    });
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ message: "Server error", error: err.message });
-  }
-};
-
-// 🔹 Get orders assigned to current waiter
-exports.getMyAssignedOrders = async (req, res) => {
-  try {
-    // Only waiters can see their assigned orders
-    if (req.user.role !== "waiter") {
-      return res.status(403).json({ 
-        message: "Only waiters can view their assigned orders"
-      });
-    }
-    
-    const orders = await FoodOrder.find({ 
-      assignedTo: req.user._id,
-      status: { $in: ['preparing', 'ready'] } // Active assigned orders
-    })
-      .populate("user", "name email")
-      .populate("items.food", "name price")
-      .sort({ tableNumber: 1, priority: -1, createdAt: 1 });
-    
-    res.json(orders);
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ message: "Server error", error: err.message });
-  }
-};
-
-// 🔹 Get available (unassigned) orders - WAITER AND ADMIN
-exports.getAvailableOrders = async (req, res) => {
-  try {
-    // Only waiters and admin can see available orders
-    if (!["waiter", "admin"].includes(req.user.role)) {
-      return res.status(403).json({ 
-        message: "Only waiters and admin can view available orders"
-      });
-    }
-    
-    const orders = await FoodOrder.find({ 
-      assignedTo: null,
-      status: 'pending'
-    })
-      .populate("user", "name email")
-      .populate("items.food", "name price")
-      .sort({ tableNumber: 1, createdAt: 1 });
-    
-    res.json(orders);
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ message: "Server error", error: err.message });
-  }
-};
-
-// 🔹 Get table status (which tables are occupied/free)
-exports.getTableStatus = async (req, res) => {
-  try {
-    const { section } = req.query;
-    
-    // Find all tables with active orders (not completed/cancelled)
-    const activeOrders = await FoodOrder.find({
-      status: { $nin: ["completed", "cancelled"] }
-    }).select("tableNumber tableSection tableStatus assignedTo status createdAt");
-    
-    // Group by table to determine overall table status
-    const tableStatus = {};
-    
-    activeOrders.forEach(order => {
-      const tableKey = `${order.tableSection}-${order.tableNumber}`;
-      
-      if (!tableStatus[tableKey]) {
-        tableStatus[tableKey] = {
-          tableNumber: order.tableNumber,
-          tableSection: order.tableSection,
-          status: order.tableStatus,
-          orderCount: 0,
-          activeOrders: [],
-          lastOrderTime: order.createdAt
-        };
-      }
-      
-      tableStatus[tableKey].orderCount++;
-      tableStatus[tableKey].activeOrders.push({
-        orderCode: order.orderCode,
-        status: order.status,
-        assignedTo: order.assignedTo
-      });
-      
-      // Update last order time if this is more recent
-      if (order.createdAt > tableStatus[tableKey].lastOrderTime) {
-        tableStatus[tableKey].lastOrderTime = order.createdAt;
-      }
-    });
-    
-    // Convert to array and filter by section if provided
-    let result = Object.values(tableStatus);
-    
-    if (section) {
-      result = result.filter(table => table.tableSection === section);
-    }
-    
-    // Sort by table number
-    result.sort((a, b) => a.tableNumber - b.tableNumber);
-    
-    res.json(result);
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ message: "Server error", error: err.message });
-  }
-};
-
-// 🔹 Check if table can be cleared (all orders served/completed)
-exports.checkTableClearance = async (req, res) => {
-  try {
-    const { tableNumber, tableSection } = req.params;
-    
-    // Find all orders for this table that are not completed/cancelled
-    const activeOrders = await FoodOrder.find({
-      tableNumber: parseInt(tableNumber),
-      tableSection: tableSection || "Main Hall",
-      status: { $nin: ["completed", "cancelled"] }
-    });
-    
-    const canClear = activeOrders.length === 0;
-    const message = canClear 
-      ? "Table is ready to be cleared" 
-      : `Table has ${activeOrders.length} active order(s)`;
-    
-    res.json({
-      tableNumber: parseInt(tableNumber),
-      tableSection: tableSection || "Main Hall",
-      canClear,
-      activeOrderCount: activeOrders.length,
-      activeOrders: activeOrders.map(order => ({
-        orderCode: order.orderCode,
-        status: order.status,
-        createdAt: order.createdAt
-      })),
-      message
-    });
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ message: "Server error", error: err.message });
-  }
-};
-
-// 🔹 Clear table (mark as free)
-exports.clearTable = async (req, res) => {
-  try {
-    const { tableNumber, tableSection } = req.params;
-    
-    // First check if table can be cleared
-    const activeOrders = await FoodOrder.find({
-      tableNumber: parseInt(tableNumber),
-      tableSection: tableSection || "Main Hall",
-      status: { $nin: ["completed", "cancelled"] }
-    });
-    
-    if (activeOrders.length > 0) {
-      return res.status(400).json({
-        message: "Cannot clear table with active orders",
-        activeOrderCount: activeOrders.length,
-        activeOrders: activeOrders.map(order => ({
-          orderCode: order.orderCode,
-          status: order.status
-        }))
-      });
-    }
-    
-    // Update all orders for this table to mark table as free
-    await FoodOrder.updateMany(
-      {
-        tableNumber: parseInt(tableNumber),
-        tableSection: tableSection || "Main Hall"
+        }
       },
       {
-        tableStatus: "free",
-        tableClearedAt: new Date()
+        $project: {
+          _id: 0,
+          totalItems: 1,
+          availableItems: 1,
+          unavailableItems: { $subtract: ["$totalItems", "$availableItems"] },
+          avgPrice: { $round: ["$avgPrice", 2] },
+          minPrice: 1,
+          maxPrice: 1,
+          vegetarianCount: 1,
+          veganCount: 1,
+          spicyCount: 1
+        }
       }
-    );
+    ]);
     
-    res.json({
-      message: "Table cleared successfully",
-      tableNumber: parseInt(tableNumber),
-      tableSection: tableSection || "Main Hall",
-      clearedAt: new Date(),
-      nextSteps: "Table is now ready for new guests"
-    });
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ message: "Server error", error: err.message });
-  }
-};
-
-// 🔹 Mark table as occupied (when new guests sit)
-exports.occupyTable = async (req, res) => {
-  try {
-    const { tableNumber, tableSection } = req.body;
-    
-    if (!tableNumber) {
-      return res.status(400).json({ message: "Table number is required" });
-    }
-    
-    // Check if table is already occupied with active orders
-    const activeOrders = await FoodOrder.find({
-      tableNumber: parseInt(tableNumber),
-      tableSection: tableSection || "Main Hall",
-      tableStatus: "occupied",
-      status: { $nin: ["completed", "cancelled"] }
-    });
-    
-    if (activeOrders.length > 0) {
-      return res.status(409).json({
-        message: "Table is already occupied",
-        currentOrders: activeOrders.length,
-        lastOrder: activeOrders[0]?.createdAt
-      });
-    }
-    
-    // Update any existing orders to mark table as occupied
-    await FoodOrder.updateMany(
+    // Get category distribution
+    const categoryStats = await Food.aggregate([
       {
-        tableNumber: parseInt(tableNumber),
-        tableSection: tableSection || "Main Hall"
+        $lookup: {
+          from: "foodcategories",
+          localField: "category",
+          foreignField: "_id",
+          as: "categoryInfo"
+        }
       },
+      { $unwind: "$categoryInfo" },
       {
-        tableStatus: "occupied",
-        tableClearedAt: null
-      }
-    );
+        $group: {
+          _id: "$categoryInfo.name",
+          count: { $sum: 1 },
+          available: { 
+            $sum: { $cond: ["$isAvailable", 1, 0] }
+          }
+        }
+      },
+      { $sort: { count: -1 } }
+    ]);
     
     res.json({
-      message: "Table marked as occupied",
-      tableNumber: parseInt(tableNumber),
-      tableSection: tableSection || "Main Hall",
-      occupiedAt: new Date()
+      overview: stats[0] || {},
+      categories: categoryStats
     });
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ message: "Server error", error: err.message });
-  }
-};
-
-// 🔹 NEW: Get all waiters (for admin to assign orders)
-exports.getWaiters = async (req, res) => {
-  try {
-    // Only admin can get waiter list
-    if (req.user.role !== "admin") {
-      return res.status(403).json({ 
-        message: "Only admin can view waiter list"
-      });
-    }
-    
-    const waiters = await User.find({ 
-      role: "waiter"
-    }).select("_id name email role isActive createdAt");
-    
-    res.json(waiters);
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ message: "Server error", error: err.message });
-  }
-};
-
-// 🔹 NEW: Admin assign order to specific waiter
-exports.assignOrderToWaiter = async (req, res) => {
-  try {
-    const { orderCode } = req.params;
-    const { waiterId } = req.body;
-    
-    // Only admin can assign orders to waiters
-    if (req.user.role !== "admin") {
-      return res.status(403).json({ 
-        message: "Only admin can assign orders to waiters"
-      });
-    }
-    
-    if (!waiterId) {
-      return res.status(400).json({ 
-        message: "Waiter ID is required" 
-      });
-    }
-    
-    const order = await FoodOrder.findOne({ orderCode });
-    if (!order) return res.status(404).json({ message: "Order not found" });
-    
-    // Check if waiter exists and is actually a waiter
-    const waiter = await User.findById(waiterId);
-    if (!waiter) {
-      return res.status(404).json({ message: "Waiter not found" });
-    }
-    
-    if (waiter.role !== "waiter") {
-      return res.status(400).json({ 
-        message: "User is not a waiter",
-        details: `User role: ${waiter.role}`
-      });
-    }
-    
-    // Check if waiter is active
-    if (waiter.isActive === false) {
-      return res.status(400).json({ 
-        message: "Waiter account is deactivated",
-        details: "Please assign to an active waiter"
-      });
-    }
-    
-    // Check if order is already assigned
-    if (order.assignedTo && order.assignedTo.toString() === waiterId) {
-      return res.status(400).json({ 
-        message: "Order is already assigned to this waiter"
-      });
-    }
-    
-    // Check if order is pending
-    if (order.status !== "pending") {
-      return res.status(400).json({ 
-        message: `Cannot assign order with status: ${order.status}`,
-        details: "Only pending orders can be assigned"
-      });
-    }
-    
-    // Assign order to waiter
-    order.assignedTo = waiterId;
-    order.assignedAt = new Date();
-    order.status = "preparing"; // Auto-update status
-    order.assignedBy = req.user._id; // Track who assigned it
-    
-    await order.save();
-    
-    const updatedOrder = await FoodOrder.findOne({ orderCode })
-      .populate("user", "name email")
-      .populate("items.food", "name price")
-      .populate("assignedTo", "name email role")
-      .populate("assignedBy", "name email role");
-    
-    res.json({
-      message: `Order successfully assigned to ${waiter.name}`,
-      order: updatedOrder,
-      assignmentDetails: {
-        assignedBy: req.user.name,
-        assignedTo: waiter.name,
-        assignedAt: order.assignedAt,
-        previousStatus: "pending",
-        newStatus: "preparing"
-      }
+  } catch (error) {
+    console.error("Get food stats error:", error);
+    res.status(500).json({ 
+      message: "Server error", 
+      error: error.message 
     });
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ message: "Server error", error: err.message });
   }
 };

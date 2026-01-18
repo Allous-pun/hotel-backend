@@ -1,80 +1,105 @@
 const express = require("express");
 const router = express.Router();
-const {
-  getFoods,
-  createFood,
-  createFoodOrder,
-  getMyOrders,
-  updateFood,
-  deleteFood,
-  getAllOrders,
-  updateOrderStatusByCode,
-  getOrderByCode,
-  getOrdersByTable,
-  assignOrderToSelf,
-  getMyAssignedOrders,
-  getAvailableOrders,
-  getTableStatus,
-  checkTableClearance,
-  clearTable,
-  occupyTable,
-  getWaiters,              // NEW
-  assignOrderToWaiter      // NEW
-} = require("../controllers/food.controller");
 const authMiddleware = require("../middleware/authMiddleware");
-const { adminOnly, staffOrAdmin, waiterOrAbove } = require("../middleware/roleMiddleware");
+const { 
+  adminOnly, 
+  staffOrAdmin, 
+  waiterOrAbove 
+} = require("../middleware/roleMiddleware");
 
-// Public: get all food items
-router.get("/", getFoods);
+// Import controllers
+const foodController = require("../controllers/food.controller");
+const foodCategoryController = require("../controllers/foodCategory.controller");
+const foodOrderController = require("../controllers/foodOrder.controller");
 
-// Admin/Staff: add food item
-router.post("/", authMiddleware, staffOrAdmin, createFood);
+// ==================== FOOD CATEGORY ROUTES ====================
 
-// Admin/Staff: update food item
-router.put("/:id", authMiddleware, staffOrAdmin, updateFood);
+// Public: get all categories
+router.get("/categories", foodCategoryController.getCategories);
+
+// Admin: create category
+router.post("/categories", authMiddleware, adminOnly, foodCategoryController.createCategory);
+
+// Admin: update category
+router.put("/categories/:id", authMiddleware, adminOnly, foodCategoryController.updateCategory);
+
+// Admin: delete category
+router.delete("/categories/:id", authMiddleware, adminOnly, foodCategoryController.deleteCategory);
+
+// Admin: toggle category status
+router.patch("/categories/:id/toggle", authMiddleware, adminOnly, foodCategoryController.toggleCategoryStatus);
+
+// ==================== FOOD ITEM ROUTES ====================
+
+// Public: get all food items with filters
+router.get("/", foodController.getFoods);
+
+// Public: get single food item
+router.get("/:id", foodController.getFoodById);
+
+// Admin: create food item
+router.post("/", authMiddleware, adminOnly, foodController.createFood);
+
+// Admin: update food item
+router.put("/:id", authMiddleware, adminOnly, foodController.updateFood);
 
 // Admin: delete food item
-router.delete("/:id", authMiddleware, adminOnly, deleteFood);
+router.delete("/:id", authMiddleware, adminOnly, foodController.deleteFood);
 
-// User: place food order (with table info)
-router.post("/order", authMiddleware, createFoodOrder);
+// Admin: toggle food availability
+router.patch("/:id/toggle-availability", authMiddleware, adminOnly, foodController.toggleAvailability);
 
-// User: get their orders
-router.get("/orders/my", authMiddleware, getMyOrders);
+// Admin: get food statistics
+router.get("/stats/overview", authMiddleware, adminOnly, foodController.getFoodStats);
 
-// Waiter: get my assigned orders
-router.get("/orders/my-assigned", authMiddleware, waiterOrAbove, getMyAssignedOrders);
+// ==================== ORDER ROUTES ====================
 
-// Waiter/Admin: get available (unassigned) orders
-router.get("/orders/available", authMiddleware, waiterOrAbove, getAvailableOrders);
+// Public: place guest order
+router.post("/order/guest", foodOrderController.createGuestOrder);
 
-// Waiter: assign order to self
-router.post("/orders/:orderCode/assign-self", authMiddleware, waiterOrAbove, assignOrderToSelf);
+// Authenticated: place order
+router.post("/order", authMiddleware, foodOrderController.createOrder);
 
-// Admin: get all waiters
-router.get("/waiters", authMiddleware, adminOnly, getWaiters);
+// Public: track order status
+router.get("/orders/track/:orderCode", foodOrderController.trackOrder);
 
-// Admin: assign order to specific waiter
-router.post("/orders/:orderCode/assign-waiter", authMiddleware, adminOnly, assignOrderToWaiter);
+// Authenticated: get my orders
+router.get("/orders/my", authMiddleware, foodOrderController.getMyOrders);
+
+// Authenticated: rate order
+router.post("/orders/:orderCode/rate", authMiddleware, foodOrderController.rateOrder);
 
 // Waiter/Staff/Admin: get all orders
-router.get("/orders", authMiddleware, waiterOrAbove, getAllOrders);
+router.get("/orders/all", authMiddleware, waiterOrAbove, foodOrderController.getAllOrders);
 
-// Waiter/Staff/Admin: get orders grouped by table
-router.get("/orders/by-table", authMiddleware, waiterOrAbove, getOrdersByTable);
+// Waiter/Staff/Admin: get order by code
+router.get("/orders/code/:orderCode", authMiddleware, waiterOrAbove, foodOrderController.getOrderByCode);
 
-// Waiter/Staff/Admin: update order status by orderCode
-router.put("/orders/code/:orderCode", authMiddleware, waiterOrAbove, updateOrderStatusByCode);
+// Waiter/Staff/Admin: get orders by table
+router.get("/orders/by-table/:tableId", authMiddleware, waiterOrAbove, foodOrderController.getOrdersByTable);
 
-// Waiter/Staff/Admin: get single order by orderCode
-router.get("/orders/code/:orderCode", authMiddleware, waiterOrAbove, getOrderByCode);
+// Waiter/Staff/Admin: update order status
+router.put("/orders/:orderCode/status", authMiddleware, waiterOrAbove, foodOrderController.updateOrderStatus);
 
-// 🔹 Table management routes
-router.get("/tables/status", authMiddleware, waiterOrAbove, getTableStatus);
-router.get("/tables/:tableNumber/check-clear", authMiddleware, waiterOrAbove, checkTableClearance);
-router.get("/tables/:tableNumber/:tableSection/check-clear", authMiddleware, waiterOrAbove, checkTableClearance);
-router.post("/tables/:tableNumber/clear", authMiddleware, waiterOrAbove, clearTable);
-router.post("/tables/:tableNumber/:tableSection/clear", authMiddleware, waiterOrAbove, clearTable);
-router.post("/tables/occupy", authMiddleware, waiterOrAbove, occupyTable);
+// Waiter/Staff/Admin: update order payment status
+router.put("/orders/:orderCode/payment", authMiddleware, waiterOrAbove, foodOrderController.updatePaymentStatus);
+
+// Waiter: assign order to self
+router.post("/orders/:orderCode/assign-self", authMiddleware, waiterOrAbove, foodOrderController.assignOrderToSelf);
+
+// Admin: assign order to waiter
+router.post("/orders/:orderCode/assign", authMiddleware, adminOnly, foodOrderController.assignOrderToWaiter);
+
+// Waiter: get my assigned orders
+router.get("/orders/assigned/my", authMiddleware, waiterOrAbove, foodOrderController.getMyAssignedOrders);
+
+// Waiter/Staff/Admin: get available orders
+router.get("/orders/available", authMiddleware, waiterOrAbove, foodOrderController.getAvailableOrders);
+
+// Admin: get all waiters
+router.get("/waiters/list", authMiddleware, adminOnly, foodOrderController.getWaiters);
+
+// Admin: get order statistics
+router.get("/orders/stats", authMiddleware, adminOnly, foodOrderController.getOrderStats);
 
 module.exports = router;
