@@ -28,66 +28,42 @@ connectDB();
 // Initialize app
 const app = express();
 
-// CORS Configuration - Fixed
+// ======================
+// CORS CONFIGURATION
+// ======================
+
 const allowedOrigins = [
-  'http://localhost:5173',    // Vite default port
-  'http://localhost:5174',    // Alternate Vite port
-  'http://localhost:3000',    // Create React App default
-  'http://localhost:8080',    // Another common port
-  'http://localhost:5000',    // Backend itself
-  'https://hotel-backend-vdra.onrender.com', // Your backend domain
-  process.env.FRONTEND_URL,   // From environment variable
-].filter(Boolean);
+  // Local development
+  'http://localhost:5173',
+  'http://localhost:5174',
+  'http://localhost:3000',
 
-const corsOptions = {
-  origin: function (origin, callback) {
-    // Allow requests with no origin (like mobile apps, curl, postman)
-    if (!origin) return callback(null, true);
-    
-    // Check if origin is in allowed list
-    if (allowedOrigins.includes(origin)) {
-      callback(null, true);
-    } else {
-      // For development, you can be more permissive
-      if (process.env.NODE_ENV === 'development') {
-        console.log(`Allowing origin in development: ${origin}`);
-        callback(null, true);
-      } else {
-        console.log(`Blocked by CORS: ${origin}`);
-        callback(new Error('Not allowed by CORS'));
+  // Production frontend
+  'https://ziongardenresort.com',
+  'https://www.ziongardenresort.com',
+
+  // Backend domain (optional, safe)
+  'https://hotel-backend-vdra.onrender.com',
+];
+
+app.use(
+  cors({
+    origin: (origin, callback) => {
+      // Allow server-to-server, Postman, curl, etc.
+      if (!origin) return callback(null, true);
+
+      if (allowedOrigins.includes(origin)) {
+        return callback(null, true);
       }
-    }
-  },
-  credentials: true,
-  optionsSuccessStatus: 200,
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept']
-};
 
-// Global Middleware
-app.use(cors(corsOptions));
-
-// Add explicit CORS headers for preflight requests
-app.use((req, res, next) => {
-  // Get the origin from the request
-  const origin = req.headers.origin;
-  
-  // Check if origin is in allowed list
-  if (allowedOrigins.includes(origin) || process.env.NODE_ENV === 'development') {
-    res.header('Access-Control-Allow-Origin', origin || '*');
-  }
-  
-  res.header('Access-Control-Allow-Credentials', 'true');
-  res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
-  res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS, PATCH');
-  
-  // Handle preflight requests
-  if (req.method === 'OPTIONS') {
-    return res.sendStatus(200);
-  }
-  
-  next();
-});
+      console.error('❌ Blocked by CORS:', origin);
+      return callback(null, false); // IMPORTANT: no Error()
+    },
+    credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization'],
+  })
+);
 
 app.use(helmet());
 app.use(morgan("dev"));
