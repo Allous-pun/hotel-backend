@@ -139,68 +139,82 @@ app.get("/cors-test", (req, res) => {
 });
 
 // ======================
-// 🔁 MIGRATION ROUTE (FULL)
+// 🔁 MIGRATION ROUTE (DEBUG VERSION)
 // ======================
 app.get("/migrate", async (req, res) => {
+  console.log("🚀 Migration route hit");
+
   try {
     if (req.query.key !== process.env.MIGRATION_KEY) {
+      console.log("❌ Unauthorized");
       return res.status(403).json({ success: false, message: "Unauthorized" });
     }
 
     const OLD_URI = process.env.OLD_MONGO_URI;
     const NEW_URI = process.env.NEW_MONGO_URI;
 
+    console.log("📡 URIs loaded");
+
     if (!OLD_URI || !NEW_URI) {
+      console.log("❌ Missing URIs");
       return res.status(500).json({ success: false, message: "Missing DB URIs" });
     }
 
-    const oldConn = await mongoose.createConnection(OLD_URI);
-    const newConn = await mongoose.createConnection(NEW_URI);
+    // 🔥 ADD TIMEOUTS (THIS FIXES HANGING)
+    mongoose.set("bufferTimeoutMS", 10000);
 
-    const collections = [
-      "rooms",
-      "bookings",
-      "users",
-      "foods",
-      "events",
-      "tables",
-      "settings"
-    ];
+    console.log("🔗 Connecting OLD DB...");
+    const oldConn = await mongoose.createConnection(OLD_URI, {
+      serverSelectionTimeoutMS: 10000,
+      connectTimeoutMS: 10000,
+    });
+
+    console.log("🔗 Connecting NEW DB...");
+    const newConn = await mongoose.createConnection(NEW_URI, {
+      serverSelectionTimeoutMS: 10000,
+      connectTimeoutMS: 10000,
+    });
+
+    console.log("✅ Both DBs connected");
+
+    const collections = ["rooms"];
 
     for (const name of collections) {
-      try {
-        const oldCol = oldConn.collection(name);
-        const newCol = newConn.collection(name);
+      console.log(`📦 Migrating ${name}`);
 
-        const data = await oldCol.find().toArray();
+      const oldCol = oldConn.collection(name);
+      const newCol = newConn.collection(name);
 
-        console.log(`📦 ${name}: ${data.length} records`);
+      const data = await oldCol.find().toArray();
 
-        await newCol.deleteMany({});
+      console.log(`📊 ${name} records:`, data.length);
 
-        if (data.length > 0) {
-          await newCol.insertMany(data);
-        }
+      await newCol.deleteMany({});
 
-        console.log(`✅ Migrated ${name}`);
-      } catch (colErr) {
-        console.error(`❌ Error migrating collection ${name}:`, colErr.message);
-        // Continue with other collections even if one fails
+      if (data.length > 0) {
+        await newCol.insertMany(data);
       }
+
+      console.log(`✅ Done ${name}`);
     }
 
     await oldConn.close();
     await newConn.close();
 
-    res.json({ success: true, message: "Migration complete 🎉" });
+    console.log("🎉 Migration complete");
+
+    return res.json({
+      success: true,
+      message: "Migration complete 🎉"
+    });
 
   } catch (err) {
-    console.error("❌ Migration error FULL:", err);
+    console.error("❌ Migration FAILED:", err);
+
     return res.status(500).json({
       success: false,
       message: "Migration failed",
-      error: err.message,
-      stack: err.stack
+      error: err.message
     });
   }
 });
