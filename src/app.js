@@ -139,7 +139,7 @@ app.get("/cors-test", (req, res) => {
 });
 
 // ======================
-// 🔁 MIGRATION ROUTE (DEBUG VERSION)
+// 🔁 MIGRATION ROUTE (FIXED DEBUG VERSION)
 // ======================
 app.get("/migrate", async (req, res) => {
   console.log("🚀 Migration route hit");
@@ -177,15 +177,37 @@ app.get("/migrate", async (req, res) => {
 
     console.log("✅ Both DBs connected");
 
-    const collections = ["rooms"];
+    // Full list of collections to migrate
+    const collections = [
+      "rooms",
+      "bookings",
+      "users",
+      "foods",
+      "events",
+      "tables",
+      "settings"
+    ];
 
     for (const name of collections) {
       console.log(`📦 Migrating ${name}`);
 
-      const oldCol = oldConn.collection(name);
-      const newCol = newConn.collection(name);
+      // Get collections - using db property to access native MongoDB driver
+      const oldDb = oldConn.db;
+      const newDb = newConn.db;
+      
+      const oldCol = oldDb.collection(name);
+      const newCol = newDb.collection(name);
 
-      const data = await oldCol.find().toArray();
+      // Check if collection exists in old DB
+      const collectionsList = await oldDb.listCollections({ name }).toArray();
+      if (collectionsList.length === 0) {
+        console.log(`⚠️ Collection ${name} does not exist in old DB, skipping`);
+        continue;
+      }
+
+      // Use cursor toArray() properly
+      const cursor = oldCol.find({});
+      const data = await cursor.toArray();
 
       console.log(`📊 ${name} records:`, data.length);
 
@@ -205,7 +227,8 @@ app.get("/migrate", async (req, res) => {
 
     return res.json({
       success: true,
-      message: "Migration complete 🎉"
+      message: "Migration complete 🎉",
+      collections: collections
     });
 
   } catch (err) {
@@ -214,7 +237,8 @@ app.get("/migrate", async (req, res) => {
     return res.status(500).json({
       success: false,
       message: "Migration failed",
-      error: err.message
+      error: err.message,
+      stack: err.stack
     });
   }
 });
