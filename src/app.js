@@ -4,7 +4,10 @@ const cors = require("cors");
 const helmet = require("helmet");
 const morgan = require("morgan");
 const dotenv = require("dotenv");
-const connectDB = require("./config/db");
+const mongoose = require("mongoose");
+
+// Load env FIRST (safe)
+dotenv.config();
 
 // Route imports
 const authRoutes = require("./routes/auth.routes");
@@ -14,27 +17,44 @@ const bookingRoutes = require("./routes/bookings.routes");
 const foodRoutes = require("./routes/food.routes");
 const eventRoutes = require("./routes/events.routes");
 
-// Middleware imports
+// Middleware
 const errorHandler = require("./middleware/errorHandler");
-
-// Load environment variables
-dotenv.config();
-
-// Connect to MongoDB
-connectDB();
 
 // Initialize app
 const app = express();
 
-// Global Middleware
+// ==========================
+// GLOBAL MIDDLEWARE
+// ==========================
 app.use(express.json());
 app.use(cors());
 app.use(helmet());
 app.use(morgan("dev"));
 
-// Base route
+// ==========================
+// DB CONNECTION (SAFE GUARD)
+// ==========================
+const connectDB = require("./config/db");
+
+if (process.env.MONGO_URI) {
+  connectDB();
+} else {
+  console.warn("⚠️ MONGO_URI not found - skipping DB connection");
+}
+
+// ==========================
+// BASE ROUTES
+// ==========================
 app.get("/", (req, res) => {
   res.send("🏨 Roomie Explorer Hotel Backend Running...");
+});
+
+// HEALTH CHECK (IMPORTANT FOR RENDER)
+app.get("/health", (req, res) => {
+  res.json({
+    status: "ok",
+    time: new Date().toISOString(),
+  });
 });
 
 // ==========================
@@ -46,8 +66,6 @@ app.get("/migrate", async (req, res) => {
       return res.status(403).send("Unauthorized");
     }
 
-    const mongoose = require("mongoose");
-
     const OLD_URI = process.env.OLD_MONGO_URI;
     const NEW_URI = process.env.NEW_MONGO_URI;
 
@@ -58,9 +76,7 @@ app.get("/migrate", async (req, res) => {
     const oldConn = await mongoose.createConnection(OLD_URI);
     const newConn = await mongoose.createConnection(NEW_URI);
 
-    // 👉 START SMALL FIRST
-    const collections = ["rooms"]; 
-    // later expand: ["rooms","foods","events","users","bookings"]
+    const collections = ["rooms"];
 
     for (const name of collections) {
       const oldCol = oldConn.collection(name);
@@ -100,7 +116,9 @@ app.use("/api/foods", foodRoutes);
 app.use("/api/events", eventRoutes);
 app.use("/api/settings", require("./routes/setting.routes"));
 
-// Error Handler
+// ==========================
+// ERROR HANDLER
+// ==========================
 app.use(errorHandler);
 
 module.exports = app;
