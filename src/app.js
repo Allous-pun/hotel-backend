@@ -168,20 +168,25 @@ app.get("/migrate", async (req, res) => {
     ];
 
     for (const name of collections) {
-      const oldCol = oldConn.collection(name);
-      const newCol = newConn.collection(name);
+      try {
+        const oldCol = oldConn.collection(name);
+        const newCol = newConn.collection(name);
 
-      const data = await oldCol.find().toArray();
+        const data = await oldCol.find().toArray();
 
-      console.log(`📦 ${name}: ${data.length} records`);
+        console.log(`📦 ${name}: ${data.length} records`);
 
-      await newCol.deleteMany({});
+        await newCol.deleteMany({});
 
-      if (data.length > 0) {
-        await newCol.insertMany(data);
+        if (data.length > 0) {
+          await newCol.insertMany(data);
+        }
+
+        console.log(`✅ Migrated ${name}`);
+      } catch (colErr) {
+        console.error(`❌ Error migrating collection ${name}:`, colErr.message);
+        // Continue with other collections even if one fails
       }
-
-      console.log(`✅ Migrated ${name}`);
     }
 
     await oldConn.close();
@@ -190,8 +195,13 @@ app.get("/migrate", async (req, res) => {
     res.json({ success: true, message: "Migration complete 🎉" });
 
   } catch (err) {
-    console.error("❌ Migration error:", err);
-    res.status(500).json({ success: false, message: "Migration failed" });
+    console.error("❌ Migration error FULL:", err);
+    return res.status(500).json({
+      success: false,
+      message: "Migration failed",
+      error: err.message,
+      stack: err.stack
+    });
   }
 });
 
