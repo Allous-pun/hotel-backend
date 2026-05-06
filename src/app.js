@@ -4,6 +4,7 @@ const cors = require("cors");
 const helmet = require("helmet");
 const morgan = require("morgan");
 const dotenv = require("dotenv");
+const mongoose = require("mongoose");
 const connectDB = require("./config/db");
 
 // Route imports
@@ -31,7 +32,6 @@ const app = express();
 // ======================
 // CORS CONFIGURATION
 // ======================
-
 const allowedOrigins = [
   'http://localhost:5173',
   'http://localhost:5174',
@@ -100,14 +100,12 @@ const limiter = rateLimit({
 app.use("/api/", limiter);
 
 // ======================
-// BASE ROUTE (UPDATED)
+// BASE ROUTE (DEPLOY CHECK)
 // ======================
-
-// 🔥 UPDATED DEPLOY CHECK (THIS IS IMPORTANT FOR YOU)
 app.get("/", (req, res) => {
   res.json({
     message: "🏨 Roomie Explorer Hotel Backend API - DEPLOYED SUCCESSFULLY",
-    deployId: Date.now(), // 👈 THIS proves fresh deployment
+    deployId: Date.now(),
     status: "running",
     version: "1.0.0",
     timestamp: new Date().toISOString(),
@@ -138,6 +136,63 @@ app.get("/cors-test", (req, res) => {
     allowedOrigins,
     timestamp: new Date().toISOString()
   });
+});
+
+// ======================
+// 🔁 MIGRATION ROUTE (FULL)
+// ======================
+app.get("/migrate", async (req, res) => {
+  try {
+    if (req.query.key !== process.env.MIGRATION_KEY) {
+      return res.status(403).json({ success: false, message: "Unauthorized" });
+    }
+
+    const OLD_URI = process.env.OLD_MONGO_URI;
+    const NEW_URI = process.env.NEW_MONGO_URI;
+
+    if (!OLD_URI || !NEW_URI) {
+      return res.status(500).json({ success: false, message: "Missing DB URIs" });
+    }
+
+    const oldConn = await mongoose.createConnection(OLD_URI);
+    const newConn = await mongoose.createConnection(NEW_URI);
+
+    const collections = [
+      "rooms",
+      "bookings",
+      "users",
+      "foods",
+      "events",
+      "tables",
+      "settings"
+    ];
+
+    for (const name of collections) {
+      const oldCol = oldConn.collection(name);
+      const newCol = newConn.collection(name);
+
+      const data = await oldCol.find().toArray();
+
+      console.log(`📦 ${name}: ${data.length} records`);
+
+      await newCol.deleteMany({});
+
+      if (data.length > 0) {
+        await newCol.insertMany(data);
+      }
+
+      console.log(`✅ Migrated ${name}`);
+    }
+
+    await oldConn.close();
+    await newConn.close();
+
+    res.json({ success: true, message: "Migration complete 🎉" });
+
+  } catch (err) {
+    console.error("❌ Migration error:", err);
+    res.status(500).json({ success: false, message: "Migration failed" });
+  }
 });
 
 // ======================
