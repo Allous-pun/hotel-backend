@@ -45,8 +45,10 @@ if (process.env.MONGO_URI) {
 // ==========================
 // BASE ROUTES
 // ==========================
+
+// 🔥 UPDATED DEPLOY ROUTE (YOU REQUESTED THIS)
 app.get("/", (req, res) => {
-  res.send("🏨 Roomie Explorer Hotel Backend Running...");
+  res.send("UPDATED DEPLOY " + Date.now());
 });
 
 // HEALTH CHECK (IMPORTANT FOR RENDER)
