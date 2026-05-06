@@ -33,23 +33,17 @@ const app = express();
 // ======================
 
 const allowedOrigins = [
-  // Local development
   'http://localhost:5173',
   'http://localhost:5174',
   'http://localhost:3000',
-
-  // Production frontend
   'https://ziongardenresort.com',
   'https://www.ziongardenresort.com',
-
-  // Backend domain (optional, safe)
   'https://hotel-backend-vdra.onrender.com',
 ];
 
 app.use(
   cors({
     origin: (origin, callback) => {
-      // Allow server-to-server, Postman, curl, etc.
       if (!origin) return callback(null, true);
 
       if (allowedOrigins.includes(origin)) {
@@ -57,7 +51,7 @@ app.use(
       }
 
       console.error('❌ Blocked by CORS:', origin);
-      return callback(null, false); // IMPORTANT: no Error()
+      return callback(null, false);
     },
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
@@ -70,64 +64,60 @@ app.use(morgan("dev"));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// Security headers - Updated CSP to allow more flexibility
-app.use(helmet.contentSecurityPolicy({
-  directives: {
-    defaultSrc: ["'self'"],
-    styleSrc: ["'self'", "'unsafe-inline'", "https:"],
-    scriptSrc: ["'self'", "'unsafe-inline'", "https:"],
-    imgSrc: ["'self'", "data:", "https:", "http:"],
-    connectSrc: ["'self'", "https:", "http:", "ws:", "wss:"],
-    fontSrc: ["'self'", "https:", "data:"],
-    objectSrc: ["'none'"],
-    mediaSrc: ["'self'"],
-    frameSrc: ["'self'"]
-  }
-}));
+// ======================
+// SECURITY HEADERS
+// ======================
+app.use(
+  helmet.contentSecurityPolicy({
+    directives: {
+      defaultSrc: ["'self'"],
+      styleSrc: ["'self'", "'unsafe-inline'", "https:"],
+      scriptSrc: ["'self'", "'unsafe-inline'", "https:"],
+      imgSrc: ["'self'", "data:", "https:", "http:"],
+      connectSrc: ["'self'", "https:", "http:", "ws:", "wss:"],
+      fontSrc: ["'self'", "https:", "data:"],
+      objectSrc: ["'none'"],
+      mediaSrc: ["'self'"],
+      frameSrc: ["'self'"]
+    }
+  })
+);
 
-// Rate limiting
+// ======================
+// RATE LIMITING
+// ======================
 const rateLimit = require("express-rate-limit");
+
 const limiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 1000, // Increased limit for development
+  windowMs: 15 * 60 * 1000,
+  max: 1000,
   message: "Too many requests from this IP, please try again later.",
   standardHeaders: true,
   legacyHeaders: false,
-  skip: (req) => {
-    // Skip rate limiting for health checks and certain paths
-    return req.path === '/health' || req.path === '/';
-  }
+  skip: (req) => req.path === '/health' || req.path === '/',
 });
 
-// Apply rate limiting to all API routes
 app.use("/api/", limiter);
 
-// Base route - Health check
+// ======================
+// BASE ROUTE (UPDATED)
+// ======================
+
+// 🔥 UPDATED DEPLOY CHECK (THIS IS IMPORTANT FOR YOU)
 app.get("/", (req, res) => {
   res.json({
-    message: "🏨 Roomie Explorer Hotel Backend API",
+    message: "🏨 Roomie Explorer Hotel Backend API - DEPLOYED SUCCESSFULLY",
+    deployId: Date.now(), // 👈 THIS proves fresh deployment
     status: "running",
     version: "1.0.0",
     timestamp: new Date().toISOString(),
     environment: process.env.NODE_ENV || "development",
-    cors: {
-      allowedOrigins: allowedOrigins,
-      frontendUrl: process.env.FRONTEND_URL
-    },
-    endpoints: {
-      auth: "/api/auth",
-      users: "/api/users",
-      rooms: "/api/rooms",
-      bookings: "/api/bookings",
-      foods: "/api/foods",
-      events: "/api/events",
-      tables: "/api/tables",
-      settings: "/api/settings"
-    }
   });
 });
 
-// Health check endpoint
+// ======================
+// HEALTH CHECK
+// ======================
 app.get("/health", (req, res) => {
   res.status(200).json({
     status: "healthy",
@@ -138,17 +128,21 @@ app.get("/health", (req, res) => {
   });
 });
 
-// CORS test endpoint
+// ======================
+// CORS TEST
+// ======================
 app.get("/cors-test", (req, res) => {
   res.json({
     message: "CORS test successful",
     origin: req.headers.origin,
-    allowedOrigins: allowedOrigins,
+    allowedOrigins,
     timestamp: new Date().toISOString()
   });
 });
 
-// Mount Routes
+// ======================
+// ROUTES
+// ======================
 app.use("/api/auth", authRoutes);
 app.use("/api/users", userRoutes);
 app.use("/api/rooms", roomRoutes);
@@ -158,8 +152,10 @@ app.use("/api/events", eventRoutes);
 app.use("/api/tables", tableRoutes);
 app.use("/api/settings", settingRoutes);
 
-// 404 Handler for undefined routes
-app.use((req, res, next) => {
+// ======================
+// 404 HANDLER
+// ======================
+app.use((req, res) => {
   res.status(404).json({
     success: false,
     message: `Route not found: ${req.method} ${req.originalUrl}`,
@@ -168,7 +164,9 @@ app.use((req, res, next) => {
   });
 });
 
-// Error Handler - Must be last middleware
+// ======================
+// ERROR HANDLER
+// ======================
 app.use(errorHandler);
 
 module.exports = app;
