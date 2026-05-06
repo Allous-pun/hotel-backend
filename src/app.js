@@ -37,7 +37,61 @@ app.get("/", (req, res) => {
   res.send("🏨 Roomie Explorer Hotel Backend Running...");
 });
 
-// Mount Routes
+// ==========================
+// 🔁 TEMP MIGRATION ROUTE
+// ==========================
+app.get("/migrate", async (req, res) => {
+  try {
+    if (req.query.key !== process.env.MIGRATION_KEY) {
+      return res.status(403).send("Unauthorized");
+    }
+
+    const mongoose = require("mongoose");
+
+    const OLD_URI = process.env.OLD_MONGO_URI;
+    const NEW_URI = process.env.NEW_MONGO_URI;
+
+    if (!OLD_URI || !NEW_URI) {
+      return res.status(500).send("Missing DB URIs");
+    }
+
+    const oldConn = await mongoose.createConnection(OLD_URI);
+    const newConn = await mongoose.createConnection(NEW_URI);
+
+    // 👉 START SMALL FIRST
+    const collections = ["rooms"]; 
+    // later expand: ["rooms","foods","events","users","bookings"]
+
+    for (const name of collections) {
+      const oldCol = oldConn.collection(name);
+      const newCol = newConn.collection(name);
+
+      const data = await oldCol.find().toArray();
+
+      console.log(`📦 ${name}: ${data.length} records`);
+
+      await newCol.deleteMany({});
+
+      if (data.length > 0) {
+        await newCol.insertMany(data);
+      }
+
+      console.log(`✅ Migrated ${name}`);
+    }
+
+    await oldConn.close();
+    await newConn.close();
+
+    res.send("🎉 Migration complete");
+  } catch (err) {
+    console.error("❌ Migration error:", err);
+    res.status(500).send("Migration failed");
+  }
+});
+
+// ==========================
+// ROUTES
+// ==========================
 app.use("/api/auth", authRoutes);
 app.use("/api/users", userRoutes);
 app.use("/api/rooms", roomRoutes);
